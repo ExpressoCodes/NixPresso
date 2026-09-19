@@ -1,0 +1,17 @@
+# NixOS — machine-specific, generate with: sudo nixos-generate-config
+nixos/hardware-configuration.nix
+
+# Kitty generated theme file (created by `kitten themes`)
+home/.config/kitty/current-theme.conf
+
+# Hyprland backup files
+home/.config/hypr/*.bak
+home/.config/hypr/*.pre-*
+
+# Rofi backup files
+home/.config/rofi/*.bak
+
+# OS / editor noise
+.DS_Store
+*.swp
+*~

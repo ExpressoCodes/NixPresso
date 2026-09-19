@@ -1,0 +1,28 @@
+# Matches quickshell Island: bg@85% opacity, hover border, radius 10
+background-color=#1e1e2ed9
+text-color=#cdd6f4
+border-color=#313244
+progress-color=over #89b4fa33
+
+font=sans-serif 13
+width=320
+height=110
+padding=12
+margin=8
+border-size=1
+border-radius=10
+icons=1
+max-icon-size=48
+
+default-timeout=5000
+ignore-timeout=0
+
+[urgency=low]
+border-color=#6c7086
+
+[urgency=normal]
+border-color=#313244
+
+[urgency=high]
+border-color=#f38ba8
+text-color=#f38ba8

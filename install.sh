@@ -12,19 +12,6 @@ ask() {
     echo "${answer:-$default}"
 }
 
-# ── Gather config ─────────────────────────────────────────────────────────────
-echo ""
-bold "── NixOS Dotfiles Installer ──────────────────────────────────────"
-echo ""
-HOSTNAME=$(ask "Hostname" "$(hostname 2>/dev/null || echo nixos)")
-USERNAME=$(ask "Username" "$(whoami)")
-
-if [ -d /etc/nixos ]; then
-    select_gpu "$(detect_gpu)"
-fi
-echo ""
-
-# ── GPU detection ─────────────────────────────────────────────────────────────
 detect_gpu() {
     local pci
     pci=$(lspci 2>/dev/null || true)
@@ -45,7 +32,7 @@ detect_gpu() {
 
 pci_to_nix() {
     # "00:02.0" → "PCI:0:2:0"
-    local raw="${1%%.*}"   # strip function suffix
+    local raw="${1%%.*}"
     local bus="${raw%%:*}"
     local slot="${raw##*:}"
     printf "PCI:%d:%d:0" "$((16#$bus))" "$((16#$slot))"
@@ -74,11 +61,52 @@ select_gpu() {
     GPU_VARIANT="${map[$choice]:-intel}"
 }
 
+write_gpu_nix() {
+    local variant="$1" dest="/etc/nixos/hardware-acceleration.nix"
+    local src="$DOTFILES/nixos/gpu/$variant.nix"
+    case "$variant" in
+        intel-nvidia)
+            local intel_raw nvidia_raw
+            intel_raw=$(lspci | grep -i 'Intel.*VGA\|VGA.*Intel\|Intel.*Graphics' | awk '{print $1}' | head -1)
+            nvidia_raw=$(lspci | grep -i 'NVIDIA.*VGA\|VGA.*NVIDIA' | awk '{print $1}' | head -1)
+            sudo sed \
+                -e "s/INTEL_BUS_ID/$(pci_to_nix "$intel_raw")/g" \
+                -e "s/NVIDIA_BUS_ID/$(pci_to_nix "$nvidia_raw")/g" \
+                "$src" | sudo tee "$dest" > /dev/null
+            info "Intel bus: $(pci_to_nix "$intel_raw")  NVIDIA bus: $(pci_to_nix "$nvidia_raw")"
+            ;;
+        amd-nvidia)
+            local amd_raw nvidia_raw
+            amd_raw=$(lspci | grep -i 'AMD.*VGA\|VGA.*AMD\|Radeon' | awk '{print $1}' | head -1)
+            nvidia_raw=$(lspci | grep -i 'NVIDIA.*VGA\|VGA.*NVIDIA' | awk '{print $1}' | head -1)
+            sudo sed \
+                -e "s/AMD_BUS_ID/$(pci_to_nix "$amd_raw")/g" \
+                -e "s/NVIDIA_BUS_ID/$(pci_to_nix "$nvidia_raw")/g" \
+                "$src" | sudo tee "$dest" > /dev/null
+            info "AMD bus: $(pci_to_nix "$amd_raw")  NVIDIA bus: $(pci_to_nix "$nvidia_raw")"
+            ;;
+        *)
+            sudo cp "$src" "$dest"
+            ;;
+    esac
+}
+
+# ── Gather config ─────────────────────────────────────────────────────────────
+echo ""
+bold "── NixOS Dotfiles Installer ──────────────────────────────────────"
+echo ""
+HOSTNAME=$(ask "Hostname" "$(hostname 2>/dev/null || echo nixos)")
+USERNAME=$(ask "Username" "$(whoami)")
+
+if [ -d /etc/nixos ]; then
+    select_gpu "$(detect_gpu)"
+fi
+echo ""
+
 # ── Sudo ──────────────────────────────────────────────────────────────────────
 if [ -d /etc/nixos ]; then
     bold "→ Requesting sudo for system steps ..."
     sudo -v
-    # Keep sudo alive for the duration of the script (nixos-rebuild can be slow)
     ( while true; do sudo -n true; sleep 50; done ) &
     SUDO_KEEPALIVE_PID=$!
     trap 'kill "$SUDO_KEEPALIVE_PID" 2>/dev/null' EXIT
@@ -97,38 +125,19 @@ if [ -d /etc/nixos ]; then
         info "wrote /etc/nixos/$fname"
     done
 
-    # Write hardware-acceleration.nix from the selected GPU variant,
-    # substituting PCI bus IDs for hybrid (PRIME) configs.
     bold "→ Writing hardware-acceleration.nix ($GPU_VARIANT) ..."
-    GPU_SRC="$DOTFILES/nixos/gpu/$GPU_VARIANT.nix"
-    case "$GPU_VARIANT" in
-        intel-nvidia)
-            INTEL_BUS=$(lspci | grep -i 'Intel.*VGA\|VGA.*Intel\|Intel.*Graphics' | awk '{print $1}' | head -1)
-            NVIDIA_BUS=$(lspci | grep -i 'NVIDIA.*VGA\|VGA.*NVIDIA' | awk '{print $1}' | head -1)
-            sudo sed \
-                -e "s/INTEL_BUS_ID/$(pci_to_nix "$INTEL_BUS")/g" \
-                -e "s/NVIDIA_BUS_ID/$(pci_to_nix "$NVIDIA_BUS")/g" \
-                "$GPU_SRC" | sudo tee /etc/nixos/hardware-acceleration.nix > /dev/null
-            info "Intel bus: $(pci_to_nix "$INTEL_BUS")  NVIDIA bus: $(pci_to_nix "$NVIDIA_BUS")"
-            ;;
-        amd-nvidia)
-            AMD_BUS=$(lspci | grep -i 'AMD.*VGA\|VGA.*AMD\|Radeon' | awk '{print $1}' | head -1)
-            NVIDIA_BUS=$(lspci | grep -i 'NVIDIA.*VGA\|VGA.*NVIDIA' | awk '{print $1}' | head -1)
-            sudo sed \
-                -e "s/AMD_BUS_ID/$(pci_to_nix "$AMD_BUS")/g" \
-                -e "s/NVIDIA_BUS_ID/$(pci_to_nix "$NVIDIA_BUS")/g" \
-                "$GPU_SRC" | sudo tee /etc/nixos/hardware-acceleration.nix > /dev/null
-            info "AMD bus: $(pci_to_nix "$AMD_BUS")  NVIDIA bus: $(pci_to_nix "$NVIDIA_BUS")"
-            ;;
-        *)
-            sudo cp "$GPU_SRC" /etc/nixos/hardware-acceleration.nix
-            ;;
-    esac
+    write_gpu_nix "$GPU_VARIANT"
     info "wrote /etc/nixos/hardware-acceleration.nix"
 
-    # Generate hardware-configuration.nix if absent.
-    # nixos-generate-config won't overwrite an existing configuration.nix,
-    # so it's safe to run after we've written our files.
+    # Save user values so update.sh can re-apply substitutions later
+    sudo tee /etc/nixos/.dotfiles-vars > /dev/null <<EOF
+DOTFILES_HOSTNAME=$HOSTNAME
+DOTFILES_USERNAME=$USERNAME
+DOTFILES_GPU_VARIANT=$GPU_VARIANT
+DOTFILES_REPO=$DOTFILES
+EOF
+    info "saved vars to /etc/nixos/.dotfiles-vars"
+
     if [ ! -f /etc/nixos/hardware-configuration.nix ]; then
         bold "→ Generating hardware-configuration.nix ..."
         sudo nixos-generate-config
@@ -136,8 +145,6 @@ if [ -d /etc/nixos ]; then
         info "hardware-configuration.nix already present, skipping."
     fi
 
-    # Set hostname temporarily so the flake attribute nixosConfigurations.<hostname>
-    # is reachable without a reboot.
     bold "→ Setting hostname temporarily to '$HOSTNAME' ..."
     sudo hostname "$HOSTNAME"
 
@@ -164,3 +171,4 @@ done
 
 echo ""
 bold "Done! Log out and back in (or reboot) for all changes to take effect."
+bold "To receive future updates: ./update.sh"

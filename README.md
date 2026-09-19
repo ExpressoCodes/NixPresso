@@ -1,6 +1,6 @@
 # NixPresso
 
-NixOS + Hyprland desktop. Clone and run one script to rebuild the full system on a new machine.
+NixOS + Hyprland desktop. Clone and run one script to get the full setup on any existing NixOS system.
 
 ## Stack
 
@@ -18,49 +18,28 @@ NixOS + Hyprland desktop. Clone and run one script to rebuild the full system on
 
 ---
 
-## Fresh install (new machine)
+## Install
 
-### 1. Boot the NixOS ISO and partition your drives
-
-Follow the [NixOS manual](https://nixos.org/manual/nixos/stable/#sec-installation-manual) for partitioning and mounting. Mount your root at `/mnt`.
-
-### 2. Clone and bootstrap
+Requires a running NixOS system (any base install).
 
 ```bash
-nix-shell -p git --run \
-  "git clone https://github.com/ExpressoCodes/NixPresso && cd NixPresso && sudo bash bootstrap.sh"
+git clone https://github.com/ExpressoCodes/NixPresso ~/NixPresso
+cd ~/NixPresso && ./install.sh
 ```
 
-`bootstrap.sh` will:
-- Ask for **hostname** and **username**
+`install.sh` will:
+- Ask for **hostname**, **username**
 - Auto-detect your GPU and ask to confirm (Intel / AMD / NVIDIA / hybrid)
-- Run `nixos-generate-config` for your hardware
-- Copy and substitute the NixOS config into `/mnt/etc/nixos/`
-- Run `nixos-install --flake /mnt/etc/nixos#<hostname>`
+- Request sudo once, keep it alive for the rebuild
+- Copy and substitute the NixOS config into `/etc/nixos/`
+- Run `nixos-rebuild switch`
+- Symlink all `~/.config` entries (Hyprland, Quickshell, qs-dock, Kitty, Rofi, Mako)
 
-### 3. Reboot, then finish the home config
-
-```bash
-git clone https://github.com/ExpressoCodes/NixPresso ~/NixPresso
-cd ~/NixPresso && ./install.sh
-```
-
-`install.sh` symlinks `~/.config/*` entries (Hyprland, Quickshell, qs-dock, Kitty, Rofi, Mako) and runs `nixos-rebuild switch` to apply any pending system config.
+Reboot and you're in.
 
 ---
 
-## Migrating an existing NixOS system
-
-```bash
-git clone https://github.com/ExpressoCodes/NixPresso ~/NixPresso
-cd ~/NixPresso && ./install.sh
-```
-
-That's it. `install.sh` handles GPU detection, username/hostname substitution, `nixos-rebuild`, and home config symlinks in one go.
-
----
-
-## Keeping up to date
+## Updating
 
 ```bash
 cd ~/NixPresso && ./update.sh
@@ -68,28 +47,25 @@ cd ~/NixPresso && ./update.sh
 
 Or press **Ctrl+U** inside NixStore.
 
-`update.sh`:
-- `git pull`
-- Re-applies NixOS config files; shows a diff and asks before touching anything you've locally modified
-- 3-way merges `packages.json` so your added/removed packages are always respected
+- Pulls latest changes
+- Re-applies NixOS config, shows a diff and asks before touching locally modified files
+- 3-way merges `packages.json` — your added/removed packages are always respected
 - Skips `nixos-rebuild` if nothing changed
-
-A systemd user timer also fires every 6 hours and sends a mako notification when upstream commits are available.
+- A systemd timer also notifies via mako every 6 hours when upstream commits are available
 
 ---
 
 ## Repo layout
 
 ```
-bootstrap.sh          # fresh NixOS ISO install
-install.sh            # post-boot or existing-system setup
+install.sh            # full setup on an existing NixOS system
 update.sh             # pull upstream changes safely
 
 nixos/                # → /etc/nixos/  (system config)
   flake.nix
-  configuration.nix   # hostname / username / locale — set by install scripts
+  configuration.nix   # hostname / username / locale — substituted by install.sh
   hyprland.nix        # Hyprland, greetd, hyprlock, polkit, portals
-  hardware-acceleration.nix   # written from nixos/gpu/ by install scripts
+  hardware-acceleration.nix   # written from nixos/gpu/ by install.sh
   gpu/                # one variant per GPU type
     intel.nix
     amd.nix
@@ -98,11 +74,11 @@ nixos/                # → /etc/nixos/  (system config)
     amd-nvidia.nix
   fonts.nix
   boot.nix
-  nixstore.nix        # NixStore TUI package manager
-  dotfiles-updater.nix  # systemd timer for update notifications
+  nixstore.nix
+  dotfiles-updater.nix
   packages.json       # managed by NixStore; 3-way merged on update
 
-home/.config/         # → ~/.config/  (user config, symlinked)
+home/.config/         # → ~/.config/  (symlinked by install.sh)
   hypr/               # Hyprland keybinds, monitors, autostart
   quickshell/         # top bar QML (workspaces · clock · tray)
   qs-dock/            # dock settings

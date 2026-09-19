@@ -13,6 +13,7 @@
       # NOTE: hardware-configuration.nix is machine-specific and not included.
       # Generate your own with: sudo nixos-generate-config
       # ./hardware-configuration.nix
+      ./dotfiles-updater.nix
       ./hyprland.nix
       ./localsend.nix
       ./nixstore.nix

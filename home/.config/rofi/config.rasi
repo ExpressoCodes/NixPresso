@@ -1,0 +1,22 @@
+configuration {
+    show-icons: true;
+    icon-theme: "Adwaita";
+
+    /* Don't search the Exec line: on NixOS every app's Exec contains
+       /nix/store/..., so "store" (or "nix") would match everything. */
+    drun-match-fields: "name,generic,keywords,categories";
+
+    /* Rank results by how well they match instead of list/history order. */
+    sort: true;
+    sorting-method: "fzf";
+}
+
+@theme "~/.local/share/rofi/themes/rounded-nord-dark.rasi"
+
+/* Overrides on top of the theme (theme file itself left untouched) */
+listview {
+    lines: 5;
+}
+element-icon {
+    size: 1.5em;
+}

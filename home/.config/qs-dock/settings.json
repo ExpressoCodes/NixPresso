@@ -1,0 +1,49 @@
+{
+    "appearance": {
+        "backgroundOpacity": 85,
+        "cornerRadius": 9,
+        "iconSize": 30,
+        "indicatorStyle": "dot-per-window",
+        "magnification": true,
+        "magnificationSpread": 2.5,
+        "maxMagnifiedSize": 48,
+        "showSeparator": true,
+        "spacing": 4
+    },
+    "behaviour": {
+        "animationSpeed": 1,
+        "bounceOnLaunch": true,
+        "clickFocused": "cycle",
+        "hideDelay": 500,
+        "hideOnFullscreen": true,
+        "lastHiddenMode": "intelligent",
+        "lastVisibleMode": "reserve",
+        "showDelay": 150,
+        "showRunning": true,
+        "visibilityMode": "reserve"
+    },
+    "filtering": {
+        "exclusions": [
+            "org.quickshell",
+            "quickshell",
+            "/^xdg-desktop-portal-.*$/",
+            "hyprpolkitagent",
+            "/^polkit-.*$/"
+        ],
+        "hideNoDisplay": true
+    },
+    "pins": [
+        "org.gnome.Nautilus",
+        "brave-origin",
+        "discord",
+        "kitty",
+        "nixstore"
+    ],
+    "position": {
+        "edge": "bottom",
+        "margin": 6,
+        "monitors": "all",
+        "onlyCurrentMonitorApps": false
+    },
+    "version": 1
+}

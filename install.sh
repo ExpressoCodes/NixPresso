@@ -136,6 +136,7 @@ DOTFILES_USERNAME=$USERNAME
 DOTFILES_GPU_VARIANT=$GPU_VARIANT
 DOTFILES_REPO=$DOTFILES
 EOF
+    sudo chmod 644 /etc/nixos/.dotfiles-vars   # readable by user services
     info "saved vars to /etc/nixos/.dotfiles-vars"
 
     # Save packages baseline so update.sh can 3-way merge future changes

@@ -138,6 +138,10 @@ DOTFILES_REPO=$DOTFILES
 EOF
     info "saved vars to /etc/nixos/.dotfiles-vars"
 
+    # Save packages baseline so update.sh can 3-way merge future changes
+    sudo cp "$DOTFILES/nixos/packages.json" /etc/nixos/.dotfiles-packages-base.json
+    info "saved packages baseline to /etc/nixos/.dotfiles-packages-base.json"
+
     if [ ! -f /etc/nixos/hardware-configuration.nix ]; then
         bold "→ Generating hardware-configuration.nix ..."
         sudo nixos-generate-config

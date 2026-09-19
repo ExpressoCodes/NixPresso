@@ -1,6 +1,9 @@
 # NixOS — machine-specific, generate with: sudo nixos-generate-config
 nixos/hardware-configuration.nix
 
+# Let nixos-rebuild generate a fresh lock on first build
+nixos/flake.lock
+
 #Hyprland backup files
 home/.config/hypr/*.bak
 home/.config/hypr/*.pre-*

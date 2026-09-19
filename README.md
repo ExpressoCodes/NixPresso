@@ -39,22 +39,6 @@ Reboot and you're in.
 
 ---
 
-## Updating
-
-```bash
-cd ~/NixPresso && ./update.sh
-```
-
-Or press **Ctrl+U** inside NixStore.
-
-- Pulls latest changes
-- Re-applies NixOS config, shows a diff and asks before touching locally modified files
-- 3-way merges `packages.json` — your added/removed packages are always respected
-- Skips `nixos-rebuild` if nothing changed
-- A systemd timer also notifies via mako every 6 hours when upstream commits are available
-
----
-
 ## Repo layout
 
 ```

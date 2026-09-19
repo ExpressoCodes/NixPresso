@@ -1,4 +1,4 @@
-# dotfiles
+# NixPresso
 
 NixOS + Hyprland desktop. Clone and run one script to rebuild the full system on a new machine.
 
@@ -28,7 +28,7 @@ Follow the [NixOS manual](https://nixos.org/manual/nixos/stable/#sec-installatio
 
 ```bash
 nix-shell -p git --run \
-  "git clone https://github.com/ExpressoCodes/dotfiles && cd dotfiles && sudo bash bootstrap.sh"
+  "git clone https://github.com/ExpressoCodes/NixPresso && cd NixPresso && sudo bash bootstrap.sh"
 ```
 
 `bootstrap.sh` will:
@@ -41,8 +41,8 @@ nix-shell -p git --run \
 ### 3. Reboot, then finish the home config
 
 ```bash
-git clone https://github.com/ExpressoCodes/dotfiles ~/dotfiles
-cd ~/dotfiles && ./install.sh
+git clone https://github.com/ExpressoCodes/NixPresso ~/NixPresso
+cd ~/NixPresso && ./install.sh
 ```
 
 `install.sh` symlinks `~/.config/*` entries (Hyprland, Quickshell, qs-dock, Kitty, Rofi, Mako) and runs `nixos-rebuild switch` to apply any pending system config.
@@ -52,8 +52,8 @@ cd ~/dotfiles && ./install.sh
 ## Migrating an existing NixOS system
 
 ```bash
-git clone https://github.com/ExpressoCodes/dotfiles ~/dotfiles
-cd ~/dotfiles && ./install.sh
+git clone https://github.com/ExpressoCodes/NixPresso ~/NixPresso
+cd ~/NixPresso && ./install.sh
 ```
 
 That's it. `install.sh` handles GPU detection, username/hostname substitution, `nixos-rebuild`, and home config symlinks in one go.
@@ -63,7 +63,7 @@ That's it. `install.sh` handles GPU detection, username/hostname substitution, `
 ## Keeping up to date
 
 ```bash
-cd ~/dotfiles && ./update.sh
+cd ~/NixPresso && ./update.sh
 ```
 
 Or press **Ctrl+U** inside NixStore.

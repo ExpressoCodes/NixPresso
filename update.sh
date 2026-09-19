@@ -10,6 +10,63 @@ info()  { printf '  %s\n' "$*"; }
 ok()    { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 skip()  { printf '  \033[33m–\033[0m %s\n' "$*"; }
 
+merge_packages() {
+    local base_file="$1" upstream_file="$2" current_file="$3"
+
+    # 3-way merge: respect both upstream changes and user changes
+    local result
+    result=$(jq -n \
+        --argjson base     "$(sudo cat "$base_file")" \
+        --argjson upstream "$(cat "$upstream_file")" \
+        --argjson current  "$(sudo cat "$current_file")" \
+        '
+          ($upstream - $base)    as $added_upstream   |
+          ($base - $upstream)    as $removed_upstream |
+          ($current - $base)     as $user_added       |
+          ($current + $added_upstream - $removed_upstream) | unique | sort
+        ')
+
+    # Compute what changed for the summary
+    local added removed user_kept
+    added=$(jq -n \
+        --argjson base "$(sudo cat "$base_file")" \
+        --argjson upstream "$(cat "$upstream_file")" \
+        '$upstream - $base | sort')
+    removed=$(jq -n \
+        --argjson base "$(sudo cat "$base_file")" \
+        --argjson upstream "$(cat "$upstream_file")" \
+        --argjson current "$(sudo cat "$current_file")" \
+        '($base - $upstream) | map(select(. as $p | $current | contains([$p]))) | sort')
+    user_kept=$(jq -n \
+        --argjson base "$(sudo cat "$base_file")" \
+        --argjson current "$(sudo cat "$current_file")" \
+        '$current - $base | sort')
+
+    local n_added n_removed n_user
+    n_added=$(echo "$added" | jq 'length')
+    n_removed=$(echo "$removed" | jq 'length')
+    n_user=$(echo "$user_kept" | jq 'length')
+
+    if [ "$n_added" -eq 0 ] && [ "$n_removed" -eq 0 ]; then
+        echo "$result"
+        return 0
+    fi
+
+    echo ""
+    bold "  packages.json — upstream changes:"
+    [ "$n_added"   -gt 0 ] && info "  + added:   $(echo "$added"   | jq -r 'join(", ")')"
+    [ "$n_removed" -gt 0 ] && info "  - removed: $(echo "$removed" | jq -r 'join(", ")')"
+    [ "$n_user"    -gt 0 ] && info "  ✓ your packages kept: $(echo "$user_kept" | jq -r 'join(", ")')"
+    echo ""
+    read -rp "  $(bold "Apply these upstream changes?") [Y/n]: " ans
+    ans="${ans:-y}"
+    if [[ "$ans" =~ ^[Yy] ]]; then
+        echo "$result"
+    else
+        sudo cat "$current_file"   # return unchanged
+    fi
+}
+
 pci_to_nix() {
     local raw="${1%%.*}"
     local bus="${raw%%:*}"
@@ -54,12 +111,43 @@ trap 'kill "$SUDO_KEEPALIVE_PID" 2>/dev/null' EXIT
 
 UPDATED=0
 
+BASE_PKGS="/etc/nixos/.dotfiles-packages-base.json"
+
 for src in "$DOTFILES/nixos"/*; do
     [ -f "$src" ] || continue
     fname="$(basename "$src")"
     dest="/etc/nixos/$fname"
 
-    # Generate what we'd write
+    # packages.json: 3-way merge to respect both upstream and user changes
+    if [ "$fname" = "packages.json" ]; then
+        if [ ! -f "$dest" ]; then
+            sudo cp "$src" "$dest"
+            sudo cp "$src" "$BASE_PKGS"
+            ok "new: $fname"
+            UPDATED=1
+            continue
+        fi
+
+        if [ ! -f "$BASE_PKGS" ]; then
+            # No baseline (pre-update.sh install) — fall through to generic diff
+            info "no packages baseline found, treating packages.json as regular file"
+        else
+            new=$(merge_packages "$BASE_PKGS" "$src" "$dest")
+            current=$(sudo cat "$dest")
+            if [ "$new" = "$current" ]; then
+                skip "unchanged: $fname"
+            else
+                echo "$new" | sudo tee "$dest" > /dev/null
+                # Update baseline to current upstream so next run diffs correctly
+                sudo cp "$src" "$BASE_PKGS"
+                ok "merged: $fname"
+                UPDATED=1
+            fi
+            continue
+        fi
+    fi
+
+    # All other files: generate substituted version and diff
     new=$(sed \
         -e "s/yourhostname/$HOSTNAME/g" \
         -e "s/yourusername/$USERNAME/g" \

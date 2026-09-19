@@ -1,71 +1,136 @@
 # dotfiles
 
-NixOS + Hyprland setup with a custom Quickshell top bar and qs-dock.
+NixOS + Hyprland desktop. Clone and run one script to rebuild the full system on a new machine.
 
 ## Stack
 
 | Layer | Tool |
 |---|---|
-| OS | NixOS (flake-based) |
+| OS | NixOS (flake, unstable) |
 | WM | Hyprland |
 | Top bar | Quickshell (QML) |
 | Dock | qs-dock |
-| Terminal | Kitty |
+| Terminal | Kitty (Gruvbox Dark) |
 | Launcher | Rofi |
 | Notifications | Mako |
 | Wallpaper | Hyprpaper |
+| Package manager TUI | NixStore |
 
-## Layout
+---
 
-```
-nixos/          → /etc/nixos/      (system config, managed as root)
-home/.config/   → ~/.config/       (user config, symlinked by install.sh)
-```
+## Fresh install (new machine)
 
-## Install
+### 1. Boot the NixOS ISO and partition your drives
 
-### 1. NixOS system config
+Follow the [NixOS manual](https://nixos.org/manual/nixos/stable/#sec-installation-manual) for partitioning and mounting. Mount your root at `/mnt`.
 
-```bash
-sudo cp -r nixos/* /etc/nixos/
-sudo nixos-generate-config   # generates hardware-configuration.nix
-```
-
-Edit `nixos/configuration.nix` — look for `# TODO` comments:
-- `networking.hostName` — your machine name
-- `users.users."yourusername"` — your username
-- `time.timeZone` / `i18n` — your locale
-
-Then rebuild:
-```bash
-sudo nixos-rebuild switch --flake /etc/nixos#yourhostname
-```
-
-### 2. User config (home/.config)
+### 2. Clone and bootstrap
 
 ```bash
-chmod +x install.sh
-./install.sh
+nix-shell -p git --run \
+  "git clone https://github.com/ExpressoCodes/dotfiles && cd dotfiles && sudo bash bootstrap.sh"
 ```
 
-This symlinks each `home/.config/<name>` directory into `~/.config/`.
-Existing directories are backed up with a `.bak` suffix.
+`bootstrap.sh` will:
+- Ask for **hostname** and **username**
+- Auto-detect your GPU and ask to confirm (Intel / AMD / NVIDIA / hybrid)
+- Run `nixos-generate-config` for your hardware
+- Copy and substitute the NixOS config into `/mnt/etc/nixos/`
+- Run `nixos-install --flake /mnt/etc/nixos#<hostname>`
 
-### 3. Rofi theme
+### 3. Reboot, then finish the home config
 
-The rofi config references `~/.local/share/rofi/themes/rounded-nord-dark.rasi`.
-Install it with:
 ```bash
-mkdir -p ~/.local/share/rofi/themes
-# download from: https://github.com/newmanls/rofi-themes-collection
+git clone https://github.com/ExpressoCodes/dotfiles ~/dotfiles
+cd ~/dotfiles && ./install.sh
 ```
 
-### 4. Kitty theme
+`install.sh` symlinks `~/.config/*` entries (Hyprland, Quickshell, qs-dock, Kitty, Rofi, Mako) and runs `nixos-rebuild switch` to apply any pending system config.
 
-The kitty config includes `current-theme.conf` (Gruvbox Dark).
-To apply it interactively: `kitten themes`
+---
 
-## Wallpaper
+## Migrating an existing NixOS system
 
-`hyprpaper.conf` points to `~/Pictures/wallpapers/qingbao.jpg`.
-Replace with your own image or update the path in `home/.config/hypr/hyprpaper.conf`.
+```bash
+git clone https://github.com/ExpressoCodes/dotfiles ~/dotfiles
+cd ~/dotfiles && ./install.sh
+```
+
+That's it. `install.sh` handles GPU detection, username/hostname substitution, `nixos-rebuild`, and home config symlinks in one go.
+
+---
+
+## Keeping up to date
+
+```bash
+cd ~/dotfiles && ./update.sh
+```
+
+Or press **Ctrl+U** inside NixStore.
+
+`update.sh`:
+- `git pull`
+- Re-applies NixOS config files; shows a diff and asks before touching anything you've locally modified
+- 3-way merges `packages.json` so your added/removed packages are always respected
+- Skips `nixos-rebuild` if nothing changed
+
+A systemd user timer also fires every 6 hours and sends a mako notification when upstream commits are available.
+
+---
+
+## Repo layout
+
+```
+bootstrap.sh          # fresh NixOS ISO install
+install.sh            # post-boot or existing-system setup
+update.sh             # pull upstream changes safely
+
+nixos/                # → /etc/nixos/  (system config)
+  flake.nix
+  configuration.nix   # hostname / username / locale — set by install scripts
+  hyprland.nix        # Hyprland, greetd, hyprlock, polkit, portals
+  hardware-acceleration.nix   # written from nixos/gpu/ by install scripts
+  gpu/                # one variant per GPU type
+    intel.nix
+    amd.nix
+    nvidia.nix
+    intel-nvidia.nix  # PRIME offload, bus IDs auto-detected
+    amd-nvidia.nix
+  fonts.nix
+  boot.nix
+  nixstore.nix        # NixStore TUI package manager
+  dotfiles-updater.nix  # systemd timer for update notifications
+  packages.json       # managed by NixStore; 3-way merged on update
+
+home/.config/         # → ~/.config/  (user config, symlinked)
+  hypr/               # Hyprland keybinds, monitors, autostart
+  quickshell/         # top bar QML (workspaces · clock · tray)
+  qs-dock/            # dock settings
+  kitty/              # terminal + Gruvbox Dark theme
+  mako/               # notification style
+  rofi/               # launcher
+```
+
+---
+
+## GPU support
+
+Auto-detected from `lspci` at install time. Override at the menu:
+
+| Option | Config used |
+|---|---|
+| `intel` | Intel VA-API + iHD driver |
+| `amd` | AMDVLK + ROCm |
+| `nvidia` | Proprietary, modesetting |
+| `intel-nvidia` | Intel iGPU daily + NVIDIA PRIME offload (`nvidia-offload <cmd>`) |
+| `amd-nvidia` | AMD iGPU daily + NVIDIA PRIME offload |
+
+---
+
+## Customisation
+
+- **Packages** — open NixStore (`nixstore` in launcher) to add/remove
+- **Monitors** — edit `~/.config/hypr/hyprland.lua` (`hl.monitor` blocks)
+- **Wallpaper** — drop an image in `~/Pictures/wallpapers/` and update `~/.config/hypr/hyprpaper.conf`
+- **Bar / dock** — edit `~/.config/quickshell/` QML files or `~/.config/qs-dock/settings.json`
+- **Locale / timezone** — edit `nixos/configuration.nix` (look for `# TODO`)

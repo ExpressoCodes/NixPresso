@@ -20,6 +20,16 @@ HOSTNAME=$(ask "Hostname" "$(hostname 2>/dev/null || echo nixos)")
 USERNAME=$(ask "Username" "$(whoami)")
 echo ""
 
+# ── Sudo ──────────────────────────────────────────────────────────────────────
+if [ -d /etc/nixos ]; then
+    bold "→ Requesting sudo for system steps ..."
+    sudo -v
+    # Keep sudo alive for the duration of the script (nixos-rebuild can be slow)
+    ( while true; do sudo -n true; sleep 50; done ) &
+    SUDO_KEEPALIVE_PID=$!
+    trap 'kill "$SUDO_KEEPALIVE_PID" 2>/dev/null' EXIT
+fi
+
 # ── NixOS system config ───────────────────────────────────────────────────────
 if [ -d /etc/nixos ]; then
     bold "→ Copying NixOS config to /etc/nixos/ ..."

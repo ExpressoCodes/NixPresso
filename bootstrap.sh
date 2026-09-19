@@ -140,14 +140,22 @@ ok "saved .dotfiles-vars"
 bold "→ Running nixos-install ..."
 nixos-install --root "$MNT" --flake "$MNT/etc/nixos#$HOSTNAME" --no-root-passwd
 
+# ── Home config — clone repo and symlink ~/.config inside the chroot ──────────
+# nixos-enter runs inside the installed system where the user account and
+# git are both available, so paths are correct for post-reboot.
+bold "→ Cloning NixPresso and wiring up ~/.config ..."
+nixos-enter --root "$MNT" -- bash -c "
+    set -e
+    git clone https://github.com/ExpressoCodes/NixPresso /home/$USERNAME/NixPresso
+    mkdir -p /home/$USERNAME/.config
+    for src in /home/$USERNAME/NixPresso/home/.config/*/; do
+        name=\$(basename \"\$src\")
+        ln -sfn \"\$src\" \"/home/$USERNAME/.config/\$name\"
+    done
+    chown -R $USERNAME:users /home/$USERNAME/NixPresso /home/$USERNAME/.config
+"
+
 echo ""
 bold "────────────────────────────────────────────────────────────────────"
-bold "✓ Installation complete!"
-echo ""
-info "After rebooting, log in as $USERNAME and run:"
-info ""
-info "  git clone https://github.com/ExpressoCodes/NixPresso ~/NixPresso"
-info "  cd ~/NixPresso && ./install.sh"
-info ""
-info "That symlinks ~/.config entries and applies the home config."
+bold "✓ Done! Reboot and you're in."
 bold "────────────────────────────────────────────────────────────────────"

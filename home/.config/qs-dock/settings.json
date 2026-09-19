@@ -34,8 +34,7 @@
     },
     "pins": [
         "org.gnome.Nautilus",
-        "brave-origin",
-        "discord",
+        "firefox",
         "kitty",
         "nixstore"
     ],

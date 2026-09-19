@@ -5,7 +5,7 @@
 # finished system.
 #
 # One-liner from the ISO:
-#   nix-shell -p git --run "git clone https://github.com/ExpressoCodes/dotfiles && cd dotfiles && bash bootstrap.sh"
+#   nix-shell -p git --run "git clone https://github.com/ExpressoCodes/NixPresso && cd NixPresso && bash bootstrap.sh"
 set -euo pipefail
 
 DOTFILES="$(cd "$(dirname "$0")" && pwd)"
@@ -131,7 +131,7 @@ cat > "$MNT/etc/nixos/.dotfiles-vars" <<EOF
 DOTFILES_HOSTNAME=$HOSTNAME
 DOTFILES_USERNAME=$USERNAME
 DOTFILES_GPU_VARIANT=$GPU_VARIANT
-DOTFILES_REPO=/home/$USERNAME/dotfiles
+DOTFILES_REPO=/home/$USERNAME/NixPresso
 EOF
 chmod 644 "$MNT/etc/nixos/.dotfiles-vars"
 ok "saved .dotfiles-vars"
@@ -146,8 +146,8 @@ bold "✓ Installation complete!"
 echo ""
 info "After rebooting, log in as $USERNAME and run:"
 info ""
-info "  git clone https://github.com/ExpressoCodes/dotfiles ~/dotfiles"
-info "  cd ~/dotfiles && ./install.sh"
+info "  git clone https://github.com/ExpressoCodes/NixPresso ~/NixPresso"
+info "  cd ~/NixPresso && ./install.sh"
 info ""
 info "That symlinks ~/.config entries and applies the home config."
 bold "────────────────────────────────────────────────────────────────────"

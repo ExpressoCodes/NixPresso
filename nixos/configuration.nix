@@ -41,6 +41,7 @@
   time.timeZone = "yourtimezone";
 
   # Select internationalisation properties.
+  i18n.supportedLocales = [ "all" ];
   i18n.defaultLocale = "yourlocale";
 
   i18n.extraLocaleSettings = {

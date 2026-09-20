@@ -16,8 +16,13 @@
 -- Create your files separately and then require them like this:
 -- require("myColors")
 
+local hypr_dir = (os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/hypr/"
 
-require("monitors")
+------------------
+---- MONITORS ----
+------------------
+
+dofile(hypr_dir .. "monitors.lua")
 
 
 ---------------------
@@ -40,6 +45,7 @@ local menu        = "rofi -show drun"
 -- Or execute your favorite apps at launch like this:
 --
 hl.on("hyprland.start", function ()
+    hl.exec_cmd(hypr_dir .. "scripts/init-monitors.sh")  -- regenerate monitors.lua if displays changed
     hl.exec_cmd("systemctl --user start hyprpolkitagent") -- auth agent
     hl.exec_cmd("mako")                                   -- notifications
     hl.exec_cmd("qs")                                     -- quickshell bar
@@ -87,7 +93,6 @@ hl.env("HYPRCURSOR_SIZE", "24")
 ---- LOOK AND FEEL ----
 -----------------------
 
-local hypr_dir = (os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/hypr/"
 dofile(hypr_dir .. "appearance.lua")
 dofile(hypr_dir .. "animations.lua")
 
@@ -313,8 +318,3 @@ hl.window_rule({
     size   = "monitor_w*0.6 monitor_h*0.7",
     center = true,
 })
-
--- >>> hyprland-settings: monitors (do not edit this line)
-hl.monitor({ output = "eDP-1", mode = "1920x1200@60.003", position = "2048x0", scale = "1" })
-hl.monitor({ output = "DP-4", mode = "2048x1152@60", position = "0x0", scale = "1" })
--- <<< hyprland-settings: monitors (do not edit this line)

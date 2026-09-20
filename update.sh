@@ -148,6 +148,11 @@ if [ ! -f "$VARS_FILE" ]; then
     done
     _gpu="${_map[$_choice]}"
 
+    read -rp "$(bold "Timezone") [UTC]: " _tz
+    _tz="${_tz:-UTC}"
+    read -rp "$(bold "Keyboard layout") [us]: " _km
+    _km="${_km:-us}"
+
     echo ""
     bold "→ Requesting sudo to write $VARS_FILE ..."
     sudo -v
@@ -155,6 +160,8 @@ if [ ! -f "$VARS_FILE" ]; then
 DOTFILES_HOSTNAME=$_hn
 DOTFILES_USERNAME=$_un
 DOTFILES_GPU_VARIANT=$_gpu
+DOTFILES_TIMEZONE=$_tz
+DOTFILES_KEYMAP=$_km
 DOTFILES_REPO=$DOTFILES
 VARSEOF
     sudo chmod 644 "$VARS_FILE"
@@ -184,6 +191,12 @@ for src in "$DOTFILES/nixos"/*; do
     [ -f "$src" ] || continue
     fname="$(basename "$src")"
     dest="/etc/nixos/$fname"
+
+    # flake.lock is managed by `nix flake update`, not by dotfiles sync
+    if [ "$fname" = "flake.lock" ]; then
+        skip "skipped: flake.lock (managed by nix flake update)"
+        continue
+    fi
 
     # packages.json: 3-way merge to respect both upstream and user changes
     if [ "$fname" = "packages.json" ]; then
@@ -215,9 +228,13 @@ for src in "$DOTFILES/nixos"/*; do
     fi
 
     # All other files: generate substituted version and diff
+    TIMEZONE="${DOTFILES_TIMEZONE:-UTC}"
+    KEYMAP="${DOTFILES_KEYMAP:-us}"
     new=$(sed \
         -e "s/yourhostname/$HOSTNAME/g" \
         -e "s/yourusername/$USERNAME/g" \
+        -e "s/yourtimezone/$TIMEZONE/g" \
+        -e "s/yourkbdlayout/$KEYMAP/g" \
         "$src")
 
     if [ ! -f "$dest" ]; then
@@ -298,12 +315,13 @@ else
 fi
 
 echo ""
-if [ "$UPDATED" -eq 1 ]; then
-    bold "→ Running nixos-rebuild switch ..."
-    sudo nixos-rebuild switch --flake "/etc/nixos#$HOSTNAME"
-else
-    bold "→ No NixOS changes — skipping rebuild."
-fi
+bold "→ Updating flake inputs ..."
+sudo nix flake update --flake /etc/nixos && ok "flake inputs updated" || info "flake update failed — continuing with current lock"
+UPDATED=1
+
+echo ""
+bold "→ Running nixos-rebuild switch ..."
+sudo nixos-rebuild switch --flake "/etc/nixos#$HOSTNAME"
 
 echo ""
 bold "Done!"

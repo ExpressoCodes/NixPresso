@@ -38,7 +38,7 @@
   networking.networkmanager.enable = true;
 
   # Set your time zone.
-  time.timeZone = "Europe/London"; # TODO: set your timezone (e.g. "America/New_York")
+  time.timeZone = "yourtimezone";
 
   # Select internationalisation properties.
   i18n.defaultLocale = "en_IE.UTF-8";
@@ -61,7 +61,7 @@
 
   # Configure keymap in X11
   services.xserver.xkb = {
-    layout = "us";
+    layout = "yourkbdlayout";
     variant = "";
   };
 

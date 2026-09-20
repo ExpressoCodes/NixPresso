@@ -34,8 +34,10 @@
     },
     "pins": [
         "org.gnome.Nautilus",
-        "firefox",
+        "brave-origin",
+        "discord",
         "kitty",
+        "hyprland-settings",
         "nixstore"
     ],
     "position": {

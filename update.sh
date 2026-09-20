@@ -3,6 +3,7 @@ set -euo pipefail
 
 DOTFILES="$(cd "$(dirname "$0")" && pwd)"
 VARS_FILE="/etc/nixos/.dotfiles-vars"
+HOME_STATE_DIR="$HOME/.local/share/dotfiles-home-state"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 bold()  { printf '\033[1m%s\033[0m\n' "$*"; }
@@ -178,24 +179,206 @@ fi
 # ── ~/.config + ~/.local/share (copied from dotfiles/home/) ──────────────────
 bold "→ Syncing home config (~/.config, ~/.local/share) ..."
 
-_copy_home_files() {
+_is_text_file() {
+    grep -qI '' "$1" 2>/dev/null
+}
+
+_backup_file() {
+    local file="$1"
+    local stamp
+    stamp=$(date +%Y%m%d-%H%M%S)
+    cp "$file" "${file}.bak.${stamp}"
+    echo "${file}.bak.${stamp}"
+}
+
+_sync_home_file_interactive() {
+    local src="$1" dst="$2" baseline="$3"
+
+    echo ""
+    bold "  ~/${dst#"$HOME"/} has upstream changes:"
+    diff "$dst" "$src" | sed 's/^/    /' || true
+    echo ""
+
+    if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+        cp "$src" "$dst"
+        cp "$src" "$baseline"
+        ok "updated: ~/${dst#"$HOME"/}"
+        return
+    fi
+
+    read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
+    ans="${ans:-u}"
+    if [[ "$ans" =~ ^[Uu] ]]; then
+        cp "$src" "$dst"
+        cp "$src" "$baseline"
+        ok "updated: ~/${dst#"$HOME"/}"
+    else
+        skip "kept local: ~/${dst#"$HOME"/}"
+    fi
+}
+
+_sync_one_home_file() {
+    local src="$1"
+    local src_base="$2"
+    local dst_base="$3"
+
+    local rel dst baseline
+    rel="${src#"$src_base"/}"
+    dst="$dst_base/$rel"
+    baseline="$HOME_STATE_DIR/${dst_base##"$HOME"/}/$rel"
+
+    # Skip any stray .bak.* files in src (defensive)
+    [[ "$src" =~ \.bak\.[0-9]{8}-[0-9]{6}$ ]] && return
+
+    mkdir -p "$(dirname "$dst")"
+    mkdir -p "$(dirname "$baseline")"
+
+    # Case 1: destination does not exist yet
+    if [ ! -f "$dst" ]; then
+        cp "$src" "$dst"
+        cp "$src" "$baseline"
+        ok "new: ~/${dst#"$HOME"/}"
+        return
+    fi
+
+    # Case 2: destination already matches new source
+    if cmp -s "$src" "$dst"; then
+        [ -f "$baseline" ] || cp "$src" "$baseline"
+        skip "unchanged: ~/${dst#"$HOME"/}"
+        return
+    fi
+
+    # Scripts: never merge, just back up + overwrite
+    if [[ "$src" == *.sh ]]; then
+        local bak
+        bak=$(_backup_file "$dst")
+        cp "$src" "$dst"
+        cp "$src" "$baseline"
+        ok "updated (script, backup: $(basename "$bak")): ~/${dst#"$HOME"/}"
+        return
+    fi
+
+    # No baseline: first-run migration
+    if [ ! -f "$baseline" ]; then
+        if ! _is_text_file "$src"; then
+            cp "$src" "$dst"
+            cp "$src" "$baseline"
+            ok "updated (binary, no baseline): ~/${dst#"$HOME"/}"
+            return
+        fi
+        local bak
+        bak=$(_backup_file "$dst")
+        cp "$src" "$dst"
+        cp "$src" "$baseline"
+        ok "updated (no baseline, backup: $(basename "$bak")): ~/${dst#"$HOME"/}"
+        return
+    fi
+
+    # Baseline matches new source: upstream unchanged, user may have diverged
+    if cmp -s "$src" "$baseline"; then
+        skip "unchanged upstream (user-modified): ~/${dst#"$HOME"/}"
+        return
+    fi
+
+    # Binary files: back up + overwrite (can't merge)
+    if ! _is_text_file "$src"; then
+        local bak
+        bak=$(_backup_file "$dst")
+        cp "$src" "$dst"
+        cp "$src" "$baseline"
+        ok "updated (binary, backup: $(basename "$bak")): ~/${dst#"$HOME"/}"
+        return
+    fi
+
+    # JSON files: use jq 3-way merge (like merge_packages)
+    if [[ "$src" == *.json ]] && command -v jq &>/dev/null; then
+        local merged
+        merged=$(jq -n \
+            --argjson base     "$(cat "$baseline")" \
+            --argjson upstream "$(cat "$src")" \
+            --argjson current  "$(cat "$dst")" \
+            '
+              ($upstream | to_entries) as $up_entries |
+              ($base | to_entries) as $base_entries |
+              ($current | to_entries) as $cur_entries |
+              # Keys removed upstream
+              ($base_entries | map(.key) | map(select(. as $k | ($up_entries | map(.key) | contains([$k]) | not)))) as $removed_keys |
+              # Start with current, apply upstream additions/changes, remove upstream deletions
+              reduce $up_entries[] as $e (
+                $current;
+                if ($base | has($e.key)) and (($base[$e.key]) == ($current[$e.key]))
+                then . + {($e.key): $e.value}  # user did not change, take upstream
+                else .  # user changed this key, keep user value
+                end
+              ) |
+              del(.[$removed_keys[]])
+            ' 2>/dev/null) || merged=""
+
+        if [ -n "$merged" ] && echo "$merged" | jq . &>/dev/null; then
+            if [ "$merged" = "$(cat "$dst")" ]; then
+                cp "$src" "$baseline"
+                skip "unchanged (json merge identical): ~/${dst#"$HOME"/}"
+            else
+                printf '%s\n' "$merged" > "$dst"
+                cp "$src" "$baseline"
+                ok "merged (json): ~/${dst#"$HOME"/}"
+            fi
+            return
+        fi
+        # jq merge failed — fall through to diff3
+    fi
+
+    # 3-way text merge with diff3
+    if ! command -v diff3 &>/dev/null; then
+        _sync_home_file_interactive "$src" "$dst" "$baseline"
+        return
+    fi
+
+    local merged diff3_exit
+    set +e
+    merged=$(diff3 -m "$dst" "$baseline" "$src" 2>/dev/null)
+    diff3_exit=$?
+    set -e
+
+    case "$diff3_exit" in
+        0)
+            if [ "$merged" = "$(cat "$dst")" ]; then
+                cp "$src" "$baseline"
+                skip "unchanged (merge identical): ~/${dst#"$HOME"/}"
+            else
+                printf '%s\n' "$merged" > "$dst"
+                cp "$src" "$baseline"
+                ok "merged: ~/${dst#"$HOME"/}"
+            fi
+            ;;
+        1)
+            local bak
+            bak=$(_backup_file "$dst")
+            cp "$src" "$dst"
+            cp "$src" "$baseline"
+            printf '  \033[33m!\033[0m conflict in ~/%s — backup: %s\n' \
+                "${dst#"$HOME"/}" "$(basename "$bak")"
+            printf '    Review and re-apply your customizations from the backup.\n'
+            ;;
+        *)
+            _sync_home_file_interactive "$src" "$dst" "$baseline"
+            ;;
+    esac
+}
+
+_sync_home_files() {
     local src_base="$1"
     local dst_base="$2"
 
     [ -d "$src_base" ] || return 0
 
     while IFS= read -r -d '' src; do
-        local rel dst
-        rel="${src#"$src_base"/}"
-        dst="$dst_base/$rel"
-        mkdir -p "$(dirname "$dst")"
-        cp "$src" "$dst"
-        ok "copied: ~/${dst#"$HOME"/}"
+        _sync_one_home_file "$src" "$src_base" "$dst_base"
     done < <(find "$src_base" -type f -print0)
 }
 
-_copy_home_files "$DOTFILES/home/.config"      "$HOME/.config"
-_copy_home_files "$DOTFILES/home/.local/share" "$HOME/.local/share"
+_sync_home_files "$DOTFILES/home/.config"      "$HOME/.config"
+_sync_home_files "$DOTFILES/home/.local/share" "$HOME/.local/share"
 echo ""
 
 # ── dconf settings ────────────────────────────────────────────────────────────

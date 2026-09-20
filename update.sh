@@ -180,6 +180,7 @@ USERNAME="$DOTFILES_USERNAME"
 GPU_VARIANT="$DOTFILES_GPU_VARIANT"
 TIMEZONE="${DOTFILES_TIMEZONE:-}"
 KEYMAP="${DOTFILES_KEYMAP:-}"
+LOCALE="${DOTFILES_LOCALE:-}"
 
 # Prompt for any vars missing from an older install, then persist them
 _vars_dirty=0
@@ -191,6 +192,10 @@ if [ -z "$KEYMAP" ]; then
     select_keymap
     _vars_dirty=1
 fi
+if [ -z "$LOCALE" ]; then
+    select_locale
+    _vars_dirty=1
+fi
 if [ "$_vars_dirty" -eq 1 ]; then
     sudo tee "$VARS_FILE" > /dev/null <<VARSEOF
 DOTFILES_HOSTNAME=$HOSTNAME
@@ -198,6 +203,7 @@ DOTFILES_USERNAME=$USERNAME
 DOTFILES_GPU_VARIANT=$GPU_VARIANT
 DOTFILES_TIMEZONE=$TIMEZONE
 DOTFILES_KEYMAP=$KEYMAP
+DOTFILES_LOCALE=$LOCALE
 DOTFILES_REPO=${DOTFILES_REPO:-$DOTFILES}
 VARSEOF
     ok "saved new vars to $VARS_FILE"
@@ -260,6 +266,7 @@ for src in "$DOTFILES/nixos"/*; do
         -e "s/yourusername/$USERNAME/g" \
         -e "s/yourtimezone/$TIMEZONE/g" \
         -e "s/yourkbdlayout/$KEYMAP/g" \
+        -e "s/yourlocale/$LOCALE/g" \
         "$src")
 
     if [ ! -f "$dest" ]; then
@@ -277,7 +284,7 @@ for src in "$DOTFILES/nixos"/*; do
 
     # Auto-apply when the current file still has unsubstituted placeholder tokens —
     # this is a first-run migration, not a real conflict.
-    if grep -qE '\byour(hostname|username|timezone|kbdlayout)\b' <(echo "$current"); then
+    if grep -qE '\byour(hostname|username|timezone|kbdlayout|locale)\b' <(echo "$current"); then
         echo "$new" | sudo tee "$dest" > /dev/null
         ok "applied: $fname (substituted placeholder tokens)"
         UPDATED=1

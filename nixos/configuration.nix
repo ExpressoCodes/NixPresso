@@ -41,18 +41,18 @@
   time.timeZone = "yourtimezone";
 
   # Select internationalisation properties.
-  i18n.defaultLocale = "en_IE.UTF-8";
+  i18n.defaultLocale = "yourlocale";
 
   i18n.extraLocaleSettings = {
-    LC_ADDRESS = "en_IE.UTF-8";
-    LC_IDENTIFICATION = "en_IE.UTF-8";
-    LC_MEASUREMENT = "en_IE.UTF-8";
-    LC_MONETARY = "en_IE.UTF-8";
-    LC_NAME = "en_IE.UTF-8";
-    LC_NUMERIC = "en_IE.UTF-8";
-    LC_PAPER = "en_IE.UTF-8";
-    LC_TELEPHONE = "en_IE.UTF-8";
-    LC_TIME = "en_IE.UTF-8";
+    LC_ADDRESS = "yourlocale";
+    LC_IDENTIFICATION = "yourlocale";
+    LC_MEASUREMENT = "yourlocale";
+    LC_MONETARY = "yourlocale";
+    LC_NAME = "yourlocale";
+    LC_NUMERIC = "yourlocale";
+    LC_PAPER = "yourlocale";
+    LC_TELEPHONE = "yourlocale";
+    LC_TIME = "yourlocale";
   };
 
   # Enable the GNOME Desktop Environment.

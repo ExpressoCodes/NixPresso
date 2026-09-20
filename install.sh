@@ -231,6 +231,21 @@ else
     done
 fi
 
+# ── dconf settings ────────────────────────────────────────────────────────────
+if command -v dconf &>/dev/null; then
+    bold "→ Applying dconf settings ..."
+    cp "$DOTFILES/home/apply-dconf.sh" "$TARGET_HOME/apply-dconf.sh"
+    chmod +x "$TARGET_HOME/apply-dconf.sh"
+    if [ "$(whoami)" != "$USERNAME" ]; then
+        sudo -u "$USERNAME" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u "$USERNAME")/bus" \
+            bash "$TARGET_HOME/apply-dconf.sh" || info "dconf: session bus not available, run ~/apply-dconf.sh after login"
+    else
+        bash "$TARGET_HOME/apply-dconf.sh" || info "dconf: failed, run ~/apply-dconf.sh after login"
+    fi
+else
+    info "dconf not found — skipping (run ~/apply-dconf.sh after first login if needed)"
+fi
+
 echo ""
 bold "Done! Log out and back in (or reboot) for all changes to take effect."
 bold "To receive future updates: ./update.sh"

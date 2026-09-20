@@ -83,6 +83,14 @@ echo ""
 bold "→ Home config (~/.config, ~/.local/share): updated via symlinks."
 echo ""
 
+# ── dconf settings ────────────────────────────────────────────────────────────
+DCONF_SCRIPT="$DOTFILES/home/apply-dconf.sh"
+if [ -f "$DCONF_SCRIPT" ] && command -v dconf &>/dev/null; then
+    bold "→ Applying dconf settings ..."
+    bash "$DCONF_SCRIPT" && ok "dconf settings applied" || info "dconf: failed (try running ~/apply-dconf.sh manually)"
+fi
+echo ""
+
 # ── NixOS config ──────────────────────────────────────────────────────────────
 if [ ! -d /etc/nixos ]; then
     info "/etc/nixos not found — skipping NixOS update."

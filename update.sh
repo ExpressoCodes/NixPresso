@@ -694,7 +694,7 @@ fi
 
 echo ""
 bold "→ Updating flake inputs ..."
-sudo nix flake update /etc/nixos && ok "flake inputs updated" || info "flake update failed — continuing with current lock"
+sudo sh -c 'cd /etc/nixos && nix flake update' && ok "flake inputs updated" || info "flake update failed — continuing with current lock"
 UPDATED=1
 
 echo ""

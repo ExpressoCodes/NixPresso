@@ -175,8 +175,64 @@ if [[ "${1:-}" != "--no-pull" ]] && [[ "${NIXSTORE_NO_PULL:-0}" != "1" ]]; then
     echo ""
 fi
 
-# ── ~/.config + ~/.local/share (symlinked — already updated by git pull) ──────
-bold "→ Home config (~/.config, ~/.local/share): updated via symlinks."
+# ── ~/.config + ~/.local/share (symlinked to dotfiles/home/) ─────────────────
+bold "→ Symlinking home config (~/.config, ~/.local/share) ..."
+
+# For each top-level entry under $DOTFILES/home/{.config,.local/share,...},
+# create a symlink in the real home directory.  If a plain directory already
+# exists there, replace it with a symlink only when every file inside it is
+# already present in the dotfiles source (i.e. nothing would be lost).
+_safe_to_replace_dir() {
+    local existing="$1" src="$2"
+    while IFS= read -r -d '' f; do
+        local rel="${f#"$existing"/}"
+        [ -e "$src/$rel" ] || return 1   # file has no dotfiles counterpart
+    done < <(find "$existing" -type f -print0)
+    return 0
+}
+
+_link_home_entries() {
+    local src_base="$1"   # e.g. $DOTFILES/home/.config
+    local dst_base="$2"   # e.g. $HOME/.config
+
+    [ -d "$src_base" ] || return 0
+    mkdir -p "$dst_base"
+
+    for src in "$src_base"/* "$src_base"/.[!.]*; do
+        [ -e "$src" ] || continue
+        local name dst
+        name="$(basename "$src")"
+        dst="$dst_base/$name"
+
+        if [ -L "$dst" ]; then
+            if [ "$(readlink "$dst")" = "$src" ]; then
+                skip "symlink ok: ~/${dst_base#"$HOME"/}/$name"
+            else
+                ln -sfn "$src" "$dst"
+                ok "updated symlink: ~/${dst_base#"$HOME"/}/$name"
+                UPDATED=1
+            fi
+        elif [ -d "$dst" ]; then
+            if _safe_to_replace_dir "$dst" "$src"; then
+                rm -rf "$dst"
+                ln -s "$src" "$dst"
+                ok "replaced dir with symlink: ~/${dst_base#"$HOME"/}/$name"
+                UPDATED=1
+            else
+                info "SKIP ~/${dst_base#"$HOME"/}/$name: plain dir has files not in dotfiles — migrate manually"
+            fi
+        elif [ -e "$dst" ]; then
+            info "SKIP ~/${dst_base#"$HOME"/}/$name: plain file exists — migrate manually"
+        else
+            ln -s "$src" "$dst"
+            ok "new symlink: ~/${dst_base#"$HOME"/}/$name"
+            UPDATED=1
+        fi
+    done
+}
+
+_link_home_entries "$DOTFILES/home/.config"       "$HOME/.config"
+_link_home_entries "$DOTFILES/home/.local/share"  "$HOME/.local/share"
 echo ""
 
 # ── dconf settings ────────────────────────────────────────────────────────────

@@ -498,6 +498,7 @@ GPU_VARIANT="$DOTFILES_GPU_VARIANT"
 TIMEZONE="${DOTFILES_TIMEZONE:-}"
 KEYMAP="${DOTFILES_KEYMAP:-}"
 LOCALE="${DOTFILES_LOCALE:-}"
+DOTFILES_REPO="${DOTFILES_REPO:-}"
 
 # Prompt for any vars missing from an older install, then persist them
 _vars_dirty=0
@@ -511,6 +512,10 @@ if [ -z "$KEYMAP" ]; then
 fi
 if [ -z "$LOCALE" ]; then
     select_locale
+    _vars_dirty=1
+fi
+if [ -z "$DOTFILES_REPO" ]; then
+    DOTFILES_REPO="$DOTFILES"
     _vars_dirty=1
 fi
 if [ "$_vars_dirty" -eq 1 ]; then

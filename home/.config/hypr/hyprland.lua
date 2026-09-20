@@ -17,37 +17,7 @@
 -- require("myColors")
 
 
-------------------
----- MONITORS ----
-------------------
-
--- See https://wiki.hypr.land/configuring/core/monitors/
--- Laptop panel, to the right of the LG
-hl.monitor({
-    output   = "eDP-1",
-    mode     = "1920x1200@60",
-    position = "2048x0",
-    scale    = "1",
-})
-
--- LG UltraFine on the left. It shows up as DP-3 or DP-4 depending on
--- the port/dock, so both get the same rule.
-for _, lg in ipairs({ "DP-3", "DP-4" }) do
-    hl.monitor({
-        output   = lg,
-        mode     = "2048x1152@60",
-        position = "0x0",
-        scale    = "1",
-    })
-end
-
--- Anything else that gets plugged in: sensible defaults, placed to the right
-hl.monitor({
-    output   = "",
-    mode     = "preferred",
-    position = "auto",
-    scale    = "auto",
-})
+require("monitors")
 
 
 ---------------------

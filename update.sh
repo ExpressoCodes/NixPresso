@@ -674,5 +674,11 @@ echo ""
 bold "→ Running nixos-rebuild switch ..."
 sudo nixos-rebuild switch --flake "/etc/nixos#$HOSTNAME"
 
+if command -v hyprctl &>/dev/null && hyprctl monitors &>/dev/null 2>&1; then
+    echo ""
+    bold "→ Reloading Hyprland config ..."
+    hyprctl reload && ok "Hyprland config reloaded" || info "hyprctl reload failed — reload manually with: hyprctl reload"
+fi
+
 echo ""
 bold "Done!"

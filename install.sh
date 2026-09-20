@@ -233,9 +233,9 @@ if [ -d /etc/nixos ]; then
         sudo sed \
             -e "s/yourhostname/$HOSTNAME/g" \
             -e "s/yourusername/$USERNAME/g" \
-            -e "s/yourtimezone/$TIMEZONE/g" \
+            -e "s|yourtimezone|$TIMEZONE|g" \
             -e "s/yourkbdlayout/$KEYMAP/g" \
-            -e "s/yourlocale/$LOCALE/g" \
+            -e "s|yourlocale|$LOCALE|g" \
             "$src" | sudo tee "/etc/nixos/$fname" > /dev/null
         info "wrote /etc/nixos/$fname"
     done
@@ -270,9 +270,9 @@ EOF
         sudo sed \
             -e "s/yourhostname/$HOSTNAME/g" \
             -e "s/yourusername/$USERNAME/g" \
-            -e "s/yourtimezone/$TIMEZONE/g" \
+            -e "s|yourtimezone|$TIMEZONE|g" \
             -e "s/yourkbdlayout/$KEYMAP/g" \
-            -e "s/yourlocale/$LOCALE/g" \
+            -e "s|yourlocale|$LOCALE|g" \
             "$src" | sudo tee "/etc/nixos/.dotfiles-nixos-baseline/$fname" > /dev/null
     done
     # hardware-acceleration.nix baseline (already written to /etc/nixos/ by write_gpu_nix)

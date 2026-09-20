@@ -24,8 +24,11 @@ ask() {
 }
 
 detect_gpu() {
+    # VM check first — systemd-detect-virt is authoritative; lspci is the fallback
+    if systemd-detect-virt --vm -q 2>/dev/null; then echo "vm" && return; fi
     local pci has_intel=false has_amd=false has_nvidia=false
     pci=$(lspci 2>/dev/null || true)
+    echo "$pci" | grep -qi 'Virtio.*GPU\|VirtIO\|QXL paravirtual\|VMware SVGA\|VirtualBox Graph' && echo "vm" && return
     echo "$pci" | grep -qi 'VGA.*Intel\|Intel.*VGA\|Intel.*Graphics' && has_intel=true
     echo "$pci" | grep -qi 'VGA.*AMD\|AMD.*VGA\|VGA.*ATI\|Radeon'   && has_amd=true
     echo "$pci" | grep -qi 'VGA.*NVIDIA\|NVIDIA.*VGA'                && has_nvidia=true
@@ -40,6 +43,7 @@ detect_gpu() {
 
 pci_to_nix() {
     local raw="${1%%.*}" bus slot
+    [ -z "$raw" ] && { printf '\033[31mError:\033[0m could not detect GPU bus ID — check lspci output and re-run\n' >&2; exit 1; }
     bus="${raw%%:*}"; slot="${raw##*:}"
     printf "PCI:%d:%d:0" "$((16#$bus))" "$((16#$slot))"
 }
@@ -59,8 +63,13 @@ select_gpu() {
     local map=( "" intel amd nvidia intel-nvidia amd-nvidia ) default_idx=1
     for i in 1 2 3 4 5; do [ "${map[$i]}" = "$detected" ] && default_idx=$i; done
     local choice
-    read -rp "$(bold "Choice") [$default_idx]: " choice
-    GPU_VARIANT="${map[${choice:-$default_idx}]:-intel}"
+    while true; do
+        read -rp "$(bold "Choice") [$default_idx]: " choice
+        choice="${choice:-$default_idx}"
+        [[ "$choice" =~ ^[1-5]$ ]] && break
+        info "Invalid choice '$choice' — enter a number 1–5."
+    done
+    GPU_VARIANT="${map[$choice]}"
 }
 
 write_gpu_nix() {
@@ -103,7 +112,13 @@ echo ""
 # ── Gather config ─────────────────────────────────────────────────────────────
 HOSTNAME=$(ask "Hostname"  "nixos")
 USERNAME=$(ask "Username"  "user")
-select_gpu "$(detect_gpu)"
+_detected="$(detect_gpu)"
+if [ "$_detected" = "vm" ]; then
+    GPU_VARIANT="vm"
+    bold "Virtual machine detected — configuring for virtio-gpu"
+else
+    select_gpu "$_detected"
+fi
 echo ""
 
 # ── Generate hardware config ──────────────────────────────────────────────────

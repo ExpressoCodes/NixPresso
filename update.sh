@@ -275,6 +275,15 @@ for src in "$DOTFILES/nixos"/*; do
         continue
     fi
 
+    # Auto-apply when the current file still has unsubstituted placeholder tokens —
+    # this is a first-run migration, not a real conflict.
+    if grep -qE '\byour(hostname|username|timezone|kbdlayout)\b' <(echo "$current"); then
+        echo "$new" | sudo tee "$dest" > /dev/null
+        ok "applied: $fname (substituted placeholder tokens)"
+        UPDATED=1
+        continue
+    fi
+
     # File differs — show diff and ask
     echo ""
     bold "  $fname has local differences:"

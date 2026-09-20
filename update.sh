@@ -196,19 +196,23 @@ _link_home_files() {
 
         mkdir -p "$dir"
 
+        # Already correct — src and dst resolve to the same inode (e.g. parent
+        # dir is already a symlink into dotfiles). Never call ln in this case.
+        if [ "$(realpath "$dst" 2>/dev/null)" = "$(realpath "$src")" ]; then
+            skip "ok: ~/${dst#"$HOME"/}"
+            continue
+        fi
+
         if [ -L "$dst" ]; then
-            if [ "$(readlink "$dst")" = "$src" ]; then
-                skip "ok: ~/${dst#"$HOME"/}"
-            else
-                ln -sf "$src" "$dst"
-                ok "updated symlink: ~/${dst#"$HOME"/}"
-                UPDATED=1
-            fi
+            # Symlink exists but points somewhere else — retarget it
+            ln -sf "$src" "$dst"
+            ok "updated symlink: ~/${dst#"$HOME"/}"
+            UPDATED=1
         elif [ -e "$dst" ]; then
-            # Real file exists — replace with symlink if contents match dotfiles,
-            # warn and leave alone if there are local differences.
+            # Real file — replace with symlink if contents match, else warn
             if cmp -s "$src" "$dst"; then
-                ln -sf "$src" "$dst"
+                rm "$dst"
+                ln -s "$src" "$dst"
                 ok "replaced with symlink: ~/${dst#"$HOME"/}"
                 UPDATED=1
             else

@@ -7,7 +7,7 @@
   hardware.graphics = {
     enable = true;
     extraPackages = with pkgs; [
-      intel-media-driver # LIBVA_DRIVER_NAME=iHD
+      intel-media-driver  # LIBVA_DRIVER_NAME=iHD
       intel-vaapi-driver
       vpl-gpu-rt
     ];

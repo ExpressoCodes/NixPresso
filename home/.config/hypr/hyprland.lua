@@ -73,7 +73,7 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("systemctl --user start hyprpolkitagent") -- auth agent
     hl.exec_cmd("mako")                                   -- notifications
     hl.exec_cmd("qs")                                     -- quickshell bar
-    hl.exec_cmd("quickshell -p " .. os.getenv("HOME") .. "/Projects/qs-dock/src")  -- dock
+    hl.exec_cmd("quickshell -p " .. os.getenv("HOME") .. "/.config/qs-dock")  -- dock
     hl.exec_cmd("hyprpaper")                              -- wallpaper (~/.config/hypr/hyprpaper.conf)
 end)
 

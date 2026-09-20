@@ -2,4 +2,4 @@
 pkill quickshell 2>/dev/null
 while pgrep quickshell > /dev/null; do sleep 0.1; done
 quickshell &
-quickshell -p "$HOME/Projects/qs-dock/src" &
+quickshell -p "$HOME/.config/qs-dock" &

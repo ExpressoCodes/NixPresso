@@ -309,7 +309,11 @@ fi
 bold "→ Applying NixOS updates (hostname=$HOSTNAME, user=$USERNAME, gpu=$GPU_VARIANT) ..."
 bold "→ Requesting sudo ..."
 if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
-    sudo -n true || { info "sudo: credentials not cached — run nixstore again."; exit 1; }
+    if [[ -n "${SUDO_ASKPASS:-}" ]]; then
+        sudo -A true || { info "sudo: authentication failed."; exit 1; }
+    else
+        sudo -n true || { info "sudo: credentials not cached — run nixstore again."; exit 1; }
+    fi
 else
     sudo -v
 fi

@@ -160,19 +160,32 @@ else
 fi
 
 # ── User config (~/.config) ───────────────────────────────────────────────────
-bold "→ Linking ~/.config entries ..."
-CONFIG="$HOME/.config"
+bold "→ Linking ~/.config entries for $USERNAME ..."
+TARGET_HOME="/home/$USERNAME"
+CONFIG="$TARGET_HOME/.config"
+
+# nixos-rebuild creates the account but the home dir is only created on first login;
+# pre-create it here so the symlinks have somewhere to land.
+if [ ! -d "$TARGET_HOME" ]; then
+    sudo mkdir -p "$TARGET_HOME"
+    sudo chown "$USERNAME:users" "$TARGET_HOME"
+    info "created $TARGET_HOME"
+fi
+sudo mkdir -p "$CONFIG"
+
 for src in "$DOTFILES/home/.config"/*/; do
     name="$(basename "$src")"
     dst="$CONFIG/$name"
-    mkdir -p "$(dirname "$dst")"
-    if [ -e "$dst" ] && [ ! -L "$dst" ]; then
+    if sudo test -e "$dst" && ! sudo test -L "$dst"; then
         info "backing up existing: $dst → $dst.bak"
-        mv "$dst" "$dst.bak"
+        sudo mv "$dst" "$dst.bak"
     fi
-    ln -sfn "$src" "$dst"
+    sudo ln -sfn "$src" "$dst"
     info "linked: $dst"
 done
+
+# Hand ownership of the whole .config tree to the target user
+sudo chown -R "$USERNAME:users" "$CONFIG"
 
 echo ""
 bold "Done! Log out and back in (or reboot) for all changes to take effect."

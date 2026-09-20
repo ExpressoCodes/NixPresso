@@ -175,6 +175,34 @@ source "$VARS_FILE"
 HOSTNAME="$DOTFILES_HOSTNAME"
 USERNAME="$DOTFILES_USERNAME"
 GPU_VARIANT="$DOTFILES_GPU_VARIANT"
+TIMEZONE="${DOTFILES_TIMEZONE:-}"
+KEYMAP="${DOTFILES_KEYMAP:-}"
+
+# Prompt for any vars missing from an older install, then persist them
+_vars_dirty=0
+if [ -z "$TIMEZONE" ]; then
+    _detected=$(timedatectl show --property=Timezone --value 2>/dev/null || echo "UTC")
+    read -rp "$(bold "Timezone") [$_detected]: " _tz
+    TIMEZONE="${_tz:-$_detected}"
+    _vars_dirty=1
+fi
+if [ -z "$KEYMAP" ]; then
+    _detected=$(localectl status 2>/dev/null | awk '/X11 Layout/{print $3}' || echo "us")
+    read -rp "$(bold "Keyboard layout") [$_detected]: " _km
+    KEYMAP="${_km:-$_detected}"
+    _vars_dirty=1
+fi
+if [ "$_vars_dirty" -eq 1 ]; then
+    sudo tee "$VARS_FILE" > /dev/null <<VARSEOF
+DOTFILES_HOSTNAME=$HOSTNAME
+DOTFILES_USERNAME=$USERNAME
+DOTFILES_GPU_VARIANT=$GPU_VARIANT
+DOTFILES_TIMEZONE=$TIMEZONE
+DOTFILES_KEYMAP=$KEYMAP
+DOTFILES_REPO=${DOTFILES_REPO:-$DOTFILES}
+VARSEOF
+    ok "saved new vars to $VARS_FILE"
+fi
 
 bold "→ Applying NixOS updates (hostname=$HOSTNAME, user=$USERNAME, gpu=$GPU_VARIANT) ..."
 bold "→ Requesting sudo ..."
@@ -228,8 +256,6 @@ for src in "$DOTFILES/nixos"/*; do
     fi
 
     # All other files: generate substituted version and diff
-    TIMEZONE="${DOTFILES_TIMEZONE:-UTC}"
-    KEYMAP="${DOTFILES_KEYMAP:-us}"
     new=$(sed \
         -e "s/yourhostname/$HOSTNAME/g" \
         -e "s/yourusername/$USERNAME/g" \

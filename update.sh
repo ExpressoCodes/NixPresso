@@ -948,6 +948,27 @@ else
 fi
 
 echo ""
+bold "→ Checking NixOS channels ..."
+_channels_dirty=0
+_current_nixos=$(sudo nix-channel --list 2>/dev/null | awk '$1=="nixos"{print $2}')
+_current_nixpkgs=$(sudo nix-channel --list 2>/dev/null | awk '$1=="nixpkgs"{print $2}')
+if [ "$_current_nixos" != "https://nixos.org/channels/nixos-unstable" ]; then
+    sudo nix-channel --add https://nixos.org/channels/nixos-unstable nixos
+    ok "channel set: nixos → nixos-unstable"
+    _channels_dirty=1
+else
+    skip "channel ok: nixos (nixos-unstable)"
+fi
+if [ "$_current_nixpkgs" != "https://nixos.org/channels/nixpkgs-unstable" ]; then
+    sudo nix-channel --add https://nixos.org/channels/nixpkgs-unstable nixpkgs
+    ok "channel set: nixpkgs → nixpkgs-unstable"
+    _channels_dirty=1
+else
+    skip "channel ok: nixpkgs (nixpkgs-unstable)"
+fi
+[ "$_channels_dirty" -eq 1 ] && sudo nix-channel --update
+
+echo ""
 bold "→ Updating flake inputs ..."
 sudo sh -c 'cd /etc/nixos && nix flake update' && ok "flake inputs updated" || info "flake update failed — continuing with current lock"
 UPDATED=1

@@ -544,6 +544,8 @@ trap 'kill "$SUDO_KEEPALIVE_PID" 2>/dev/null' EXIT
 UPDATED=0
 
 BASE_PKGS="/etc/nixos/.dotfiles-packages-base.json"
+NIXOS_BASELINE_DIR="/etc/nixos/.dotfiles-nixos-baseline"
+sudo mkdir -p "$NIXOS_BASELINE_DIR"
 
 for src in "$DOTFILES/nixos"/*; do
     [ -f "$src" ] || continue
@@ -594,47 +596,171 @@ for src in "$DOTFILES/nixos"/*; do
         -e "s|yourlocale|$LOCALE|g" \
         "$src")
 
+    baseline_file="$NIXOS_BASELINE_DIR/$fname"
+
     if [ ! -f "$dest" ]; then
         echo "$new" | sudo tee "$dest" > /dev/null
+        echo "$new" | sudo tee "$baseline_file" > /dev/null
         ok "new: $fname"
         UPDATED=1
         continue
     fi
 
     current=$(sudo cat "$dest")
+
     if [ "$new" = "$current" ]; then
+        sudo test -f "$baseline_file" || echo "$new" | sudo tee "$baseline_file" > /dev/null
         skip "unchanged: $fname"
         continue
     fi
 
-    # Auto-apply when the current file still has unsubstituted placeholder tokens —
-    # this is a first-run migration, not a real conflict.
+    # Auto-apply when the current file still has unsubstituted placeholder tokens
     if grep -qE '\byour(hostname|username|timezone|kbdlayout|locale)\b' <(echo "$current"); then
         echo "$new" | sudo tee "$dest" > /dev/null
+        echo "$new" | sudo tee "$baseline_file" > /dev/null
         ok "applied: $fname (substituted placeholder tokens)"
         UPDATED=1
         continue
     fi
 
-    # File differs — show diff and ask
+    # No baseline: first-run — show diff and ask
+    if ! sudo test -f "$baseline_file"; then
+        echo ""
+        bold "  $fname differs from dotfiles:"
+        diff <(echo "$current") <(echo "$new") | sed 's/^/    /' || true
+        echo ""
+        if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+            echo "$new" | sudo tee "$dest" > /dev/null
+            echo "$new" | sudo tee "$baseline_file" > /dev/null
+            ok "updated: $fname"
+            UPDATED=1
+        else
+            read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
+            ans="${ans:-u}"
+            if [[ "$ans" =~ ^[Uu] ]]; then
+                echo "$new" | sudo tee "$dest" > /dev/null
+                echo "$new" | sudo tee "$baseline_file" > /dev/null
+                ok "updated: $fname"
+                UPDATED=1
+            else
+                echo "$new" | sudo tee "$baseline_file" > /dev/null
+                skip "kept local (baseline recorded): $fname"
+            fi
+        fi
+        continue
+    fi
+
+    baseline=$(sudo cat "$baseline_file")
+
+    # Baseline matches new: upstream unchanged, user may have diverged — leave it
+    if [ "$new" = "$baseline" ]; then
+        skip "unchanged upstream (user-modified): $fname"
+        continue
+    fi
+
+    # Both sides changed: attempt 3-way merge with diff3
+    if command -v diff3 &>/dev/null; then
+        local_tmp=$(mktemp)
+        base_tmp=$(mktemp)
+        new_tmp=$(mktemp)
+        echo "$current" > "$local_tmp"
+        echo "$baseline" > "$base_tmp"
+        echo "$new"     > "$new_tmp"
+
+        set +e
+        merged=$(diff3 -m "$local_tmp" "$base_tmp" "$new_tmp" 2>/dev/null)
+        diff3_exit=$?
+        set -e
+        rm -f "$local_tmp" "$base_tmp" "$new_tmp"
+
+        case "$diff3_exit" in
+            0)
+                if [ "$merged" = "$current" ]; then
+                    echo "$new" | sudo tee "$baseline_file" > /dev/null
+                    skip "unchanged (merge identical): $fname"
+                else
+                    printf '%s\n' "$merged" | sudo tee "$dest" > /dev/null
+                    echo "$new" | sudo tee "$baseline_file" > /dev/null
+                    ok "merged: $fname"
+                    UPDATED=1
+                fi
+                ;;
+            1)
+                # Conflicts — fall through to interactive
+                echo ""
+                bold "  $fname has merge conflicts — showing upstream diff:"
+                diff <(echo "$current") <(echo "$new") | sed 's/^/    /' || true
+                echo ""
+                if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+                    echo "$new" | sudo tee "$dest" > /dev/null
+                    echo "$new" | sudo tee "$baseline_file" > /dev/null
+                    ok "updated: $fname"
+                    UPDATED=1
+                else
+                    read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
+                    ans="${ans:-u}"
+                    if [[ "$ans" =~ ^[Uu] ]]; then
+                        echo "$new" | sudo tee "$dest" > /dev/null
+                        echo "$new" | sudo tee "$baseline_file" > /dev/null
+                        ok "updated: $fname"
+                        UPDATED=1
+                    else
+                        echo "$new" | sudo tee "$baseline_file" > /dev/null
+                        skip "kept local (baseline recorded): $fname"
+                    fi
+                fi
+                ;;
+            *)
+                # diff3 error — fall back to simple diff + prompt
+                echo ""
+                bold "  $fname has local differences:"
+                diff <(echo "$current") <(echo "$new") | sed 's/^/    /' || true
+                echo ""
+                if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+                    echo "$new" | sudo tee "$dest" > /dev/null
+                    echo "$new" | sudo tee "$baseline_file" > /dev/null
+                    ok "updated: $fname"
+                    UPDATED=1
+                else
+                    read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
+                    ans="${ans:-u}"
+                    if [[ "$ans" =~ ^[Uu] ]]; then
+                        echo "$new" | sudo tee "$dest" > /dev/null
+                        echo "$new" | sudo tee "$baseline_file" > /dev/null
+                        ok "updated: $fname"
+                        UPDATED=1
+                    else
+                        echo "$new" | sudo tee "$baseline_file" > /dev/null
+                        skip "kept local (baseline recorded): $fname"
+                    fi
+                fi
+                ;;
+        esac
+        continue
+    fi
+
+    # No diff3 available — simple diff + prompt
     echo ""
     bold "  $fname has local differences:"
     diff <(echo "$current") <(echo "$new") | sed 's/^/    /' || true
     echo ""
     if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
         echo "$new" | sudo tee "$dest" > /dev/null
-        ok "updated: $fname"
-        UPDATED=1
-        continue
-    fi
-    read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
-    ans="${ans:-u}"
-    if [[ "$ans" =~ ^[Uu] ]]; then
-        echo "$new" | sudo tee "$dest" > /dev/null
+        echo "$new" | sudo tee "$baseline_file" > /dev/null
         ok "updated: $fname"
         UPDATED=1
     else
-        skip "kept local: $fname"
+        read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
+        ans="${ans:-u}"
+        if [[ "$ans" =~ ^[Uu] ]]; then
+            echo "$new" | sudo tee "$dest" > /dev/null
+            echo "$new" | sudo tee "$baseline_file" > /dev/null
+            ok "updated: $fname"
+            UPDATED=1
+        else
+            echo "$new" | sudo tee "$baseline_file" > /dev/null
+            skip "kept local (baseline recorded): $fname"
+        fi
     fi
 done
 
@@ -663,16 +789,26 @@ case "$GPU_VARIANT" in
         ;;
 esac
 
+ha_baseline_file="$NIXOS_BASELINE_DIR/hardware-acceleration.nix"
 current=$(sudo cat "$dest" 2>/dev/null || true)
-if [ "$new" = "$current" ]; then
+
+if [ -z "$current" ]; then
+    echo "$new" | sudo tee "$dest" > /dev/null
+    echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
+    ok "new: hardware-acceleration.nix"
+    UPDATED=1
+elif [ "$new" = "$current" ]; then
+    sudo test -f "$ha_baseline_file" || echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
     skip "unchanged: hardware-acceleration.nix"
-elif [ -n "$current" ]; then
+elif ! sudo test -f "$ha_baseline_file"; then
+    # No baseline: first-run — show diff and ask
     echo ""
-    bold "  hardware-acceleration.nix has differences:"
+    bold "  hardware-acceleration.nix differs from dotfiles:"
     diff <(echo "$current") <(echo "$new") | sed 's/^/    /' || true
     echo ""
     if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
         echo "$new" | sudo tee "$dest" > /dev/null
+        echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
         ok "updated: hardware-acceleration.nix"
         UPDATED=1
     else
@@ -680,16 +816,118 @@ elif [ -n "$current" ]; then
         ans="${ans:-u}"
         if [[ "$ans" =~ ^[Uu] ]]; then
             echo "$new" | sudo tee "$dest" > /dev/null
+            echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
             ok "updated: hardware-acceleration.nix"
             UPDATED=1
         else
-            skip "kept local: hardware-acceleration.nix"
+            echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
+            skip "kept local (baseline recorded): hardware-acceleration.nix"
         fi
     fi
 else
-    echo "$new" | sudo tee "$dest" > /dev/null
-    ok "new: hardware-acceleration.nix"
-    UPDATED=1
+    ha_baseline=$(sudo cat "$ha_baseline_file")
+    if [ "$new" = "$ha_baseline" ]; then
+        skip "unchanged upstream (user-modified): hardware-acceleration.nix"
+    elif command -v diff3 &>/dev/null; then
+        local_tmp=$(mktemp)
+        base_tmp=$(mktemp)
+        new_tmp=$(mktemp)
+        echo "$current"     > "$local_tmp"
+        echo "$ha_baseline" > "$base_tmp"
+        echo "$new"         > "$new_tmp"
+
+        set +e
+        merged=$(diff3 -m "$local_tmp" "$base_tmp" "$new_tmp" 2>/dev/null)
+        diff3_exit=$?
+        set -e
+        rm -f "$local_tmp" "$base_tmp" "$new_tmp"
+
+        case "$diff3_exit" in
+            0)
+                if [ "$merged" = "$current" ]; then
+                    echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
+                    skip "unchanged (merge identical): hardware-acceleration.nix"
+                else
+                    printf '%s\n' "$merged" | sudo tee "$dest" > /dev/null
+                    echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
+                    ok "merged: hardware-acceleration.nix"
+                    UPDATED=1
+                fi
+                ;;
+            1)
+                echo ""
+                bold "  hardware-acceleration.nix has merge conflicts — showing upstream diff:"
+                diff <(echo "$current") <(echo "$new") | sed 's/^/    /' || true
+                echo ""
+                if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+                    echo "$new" | sudo tee "$dest" > /dev/null
+                    echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
+                    ok "updated: hardware-acceleration.nix"
+                    UPDATED=1
+                else
+                    read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
+                    ans="${ans:-u}"
+                    if [[ "$ans" =~ ^[Uu] ]]; then
+                        echo "$new" | sudo tee "$dest" > /dev/null
+                        echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
+                        ok "updated: hardware-acceleration.nix"
+                        UPDATED=1
+                    else
+                        echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
+                        skip "kept local (baseline recorded): hardware-acceleration.nix"
+                    fi
+                fi
+                ;;
+            *)
+                echo ""
+                bold "  hardware-acceleration.nix has local differences:"
+                diff <(echo "$current") <(echo "$new") | sed 's/^/    /' || true
+                echo ""
+                if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+                    echo "$new" | sudo tee "$dest" > /dev/null
+                    echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
+                    ok "updated: hardware-acceleration.nix"
+                    UPDATED=1
+                else
+                    read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
+                    ans="${ans:-u}"
+                    if [[ "$ans" =~ ^[Uu] ]]; then
+                        echo "$new" | sudo tee "$dest" > /dev/null
+                        echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
+                        ok "updated: hardware-acceleration.nix"
+                        UPDATED=1
+                    else
+                        echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
+                        skip "kept local (baseline recorded): hardware-acceleration.nix"
+                    fi
+                fi
+                ;;
+        esac
+    else
+        # No diff3 — simple diff + prompt
+        echo ""
+        bold "  hardware-acceleration.nix has local differences:"
+        diff <(echo "$current") <(echo "$new") | sed 's/^/    /' || true
+        echo ""
+        if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+            echo "$new" | sudo tee "$dest" > /dev/null
+            echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
+            ok "updated: hardware-acceleration.nix"
+            UPDATED=1
+        else
+            read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
+            ans="${ans:-u}"
+            if [[ "$ans" =~ ^[Uu] ]]; then
+                echo "$new" | sudo tee "$dest" > /dev/null
+                echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
+                ok "updated: hardware-acceleration.nix"
+                UPDATED=1
+            else
+                echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
+                skip "kept local (baseline recorded): hardware-acceleration.nix"
+            fi
+        fi
+    fi
 fi
 
 echo ""

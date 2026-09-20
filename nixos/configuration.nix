@@ -96,6 +96,10 @@
     ];
   };
 
+  # Flatpak support
+  services.flatpak.enable = true;
+  xdg.portal.enable = true;
+
   # Allow unfree packages
   nixpkgs.config.allowUnfree = true;
 

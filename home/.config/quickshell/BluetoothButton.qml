@@ -9,7 +9,7 @@ BarButton {
     readonly property int connectedCount: paired.filter(d => d.connected).length
 
     visible: adapter !== null
-    text: "<span style='font-family: \"Font Awesome 7 Brands\"; font-size: 17px; font-weight: bold;'>&#xF294;</span>"
+    text: "<span style='font-family: \"Font Awesome 7 Brands\"; font-size: 14px; font-weight: bold;'>&#xF294;</span>"
     textColor: adapter?.enabled ? Theme.fg : Theme.dim
     onClicked: popup.toggle()
 
@@ -35,6 +35,17 @@ BarButton {
                     + (modelData.batteryAvailable ? `  ${Math.round(modelData.battery * 100)}%` : "")
                 textColor: modelData.connected ? Theme.accent : Theme.fg
                 onClicked: modelData.connected ? modelData.disconnect() : modelData.connect()
+            }
+        }
+
+        Rectangle { width: parent.width; height: 1; color: Theme.hover }
+
+        BarButton {
+            width: parent.width
+            text: "Bluetooth Settings"
+            onClicked: {
+                Quickshell.execDetached(["kitty", "-e", "bluetui"])
+                popup.visible = false
             }
         }
     }

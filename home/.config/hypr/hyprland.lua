@@ -73,6 +73,7 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("systemctl --user start hyprpolkitagent") -- auth agent
     hl.exec_cmd("mako")                                   -- notifications
     hl.exec_cmd("qs")                                     -- quickshell bar
+    hl.exec_cmd("quickshell -p " .. os.getenv("HOME") .. "/Projects/qs-dock/src")  -- dock
     hl.exec_cmd("hyprpaper")                              -- wallpaper (~/.config/hypr/hyprpaper.conf)
 end)
 
@@ -176,23 +177,32 @@ hl.curve("quick",          { type = "bezier", points = { {0.15, 0},    {0.1, 1} 
 -- Default springs
 hl.curve("easy",           { type = "spring", mass = 1, stiffness = 238.1191, damping = 24.21279333 })
 
-hl.animation({ leaf = "global",        enabled = true,  speed = 10,   bezier = "default" })
-hl.animation({ leaf = "border",        enabled = true,  speed = 5.39, bezier = "easeOutQuint" })
-hl.animation({ leaf = "windows",       enabled = true,  speed = 4.79, spring = "easy" })
-hl.animation({ leaf = "windowsIn",     enabled = true,  speed = 4.1,  spring = "easy",         style = "popin 87%" })
-hl.animation({ leaf = "windowsOut",    enabled = true,  speed = 1.49, bezier = "linear",       style = "popin 87%" })
-hl.animation({ leaf = "fadeIn",        enabled = true,  speed = 1.73, bezier = "almostLinear" })
-hl.animation({ leaf = "fadeOut",       enabled = true,  speed = 1.46, bezier = "almostLinear" })
-hl.animation({ leaf = "fade",          enabled = true,  speed = 3.03, bezier = "quick" })
-hl.animation({ leaf = "layers",        enabled = true,  speed = 3.81, bezier = "easeOutQuint" })
-hl.animation({ leaf = "layersIn",      enabled = true,  speed = 4,    bezier = "easeOutQuint", style = "fade" })
-hl.animation({ leaf = "layersOut",     enabled = true,  speed = 1.5,  bezier = "linear",       style = "fade" })
-hl.animation({ leaf = "fadeLayersIn",  enabled = true,  speed = 1.79, bezier = "almostLinear" })
-hl.animation({ leaf = "fadeLayersOut", enabled = true,  speed = 1.39, bezier = "almostLinear" })
-hl.animation({ leaf = "workspaces",    enabled = true,  speed = 1.94, bezier = "almostLinear", style = "fade" })
-hl.animation({ leaf = "workspacesIn",  enabled = true,  speed = 1.21, bezier = "almostLinear", style = "fade" })
-hl.animation({ leaf = "workspacesOut", enabled = true,  speed = 1.94, bezier = "almostLinear", style = "fade" })
-hl.animation({ leaf = "zoomFactor",    enabled = true,  speed = 7,    bezier = "quick" })
+-- Overshoot bezier for rofi: snaps past final size then settles back (easeOutBack)
+hl.curve("easeOutBack",    { type = "bezier", points = { {0.175, 0.885}, {0.32, 1.275} } })
+
+hl.animation({ leaf = "global",        enabled = true,  speed = 14.29, bezier = "default" })
+hl.animation({ leaf = "border",        enabled = true,  speed = 7.7,   bezier = "easeOutQuint" })
+hl.animation({ leaf = "windows",       enabled = true,  speed = 6.84,  spring = "easy" })
+hl.animation({ leaf = "windowsIn",     enabled = true,  speed = 5.86,  spring = "easy",         style = "popin 87%" })
+hl.animation({ leaf = "windowsOut",    enabled = true,  speed = 2.13,  bezier = "linear",       style = "popin 87%" })
+hl.animation({ leaf = "fadeIn",        enabled = true,  speed = 2.47,  bezier = "almostLinear" })
+hl.animation({ leaf = "fadeOut",       enabled = true,  speed = 2.09,  bezier = "almostLinear" })
+hl.animation({ leaf = "fade",          enabled = true,  speed = 4.33,  bezier = "quick" })
+hl.animation({ leaf = "layers",        enabled = true,  speed = 5.44,  bezier = "easeOutQuint" })
+hl.animation({ leaf = "layersIn",      enabled = true,  speed = 5.71,  bezier = "easeOutQuint", style = "fade" })
+hl.animation({ leaf = "layersOut",     enabled = true,  speed = 2.14,  bezier = "linear",       style = "fade" })
+hl.animation({ leaf = "fadeLayersIn",  enabled = true,  speed = 2.56,  bezier = "almostLinear" })
+hl.animation({ leaf = "fadeLayersOut", enabled = true,  speed = 1.99,  bezier = "almostLinear" })
+hl.animation({ leaf = "workspaces",    enabled = true,  speed = 2.77,  bezier = "almostLinear", style = "fade" })
+hl.animation({ leaf = "workspacesIn",  enabled = true,  speed = 1.73,  bezier = "almostLinear", style = "fade" })
+hl.animation({ leaf = "workspacesOut", enabled = true,  speed = 2.77,  bezier = "almostLinear", style = "fade" })
+hl.animation({ leaf = "zoomFactor",    enabled = true,  speed = 10,    bezier = "quick" })
+
+-- Rofi pops in from 55% with a bouncy overshoot instead of the plain fade other layers get
+hl.layer_rule({
+    match     = { namespace = "^rofi$" },
+    animation = "popin 55% 9 easeOutBack",
+})
 
 -- Ref https://wiki.hypr.land/configuring/core/rules/workspace-rules/
 -- "Smart gaps" / "No gaps when only"
@@ -298,6 +308,7 @@ hl.bind(mainMod .. " + V", hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mainMod .. " + D", hl.dsp.exec_cmd(menu))
 hl.bind(mainMod .. " + P", hl.dsp.window.pseudo())
 hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"))    -- dwindle only
+hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/qs-restart"))  -- reload bar & dock
 
 -- Move focus with mainMod + arrow keys
 hl.bind(mainMod .. " + left",  hl.dsp.focus({ direction = "left" }))

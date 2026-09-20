@@ -5,6 +5,8 @@ Rectangle {
     id: root
     property alias text: label.text
     property color textColor: Theme.fg
+    property int fontPixelSize: Theme.fontSize
+    property bool fontBold: false
     readonly property bool hovered: area.containsMouse
     signal clicked(var mouse)
 
@@ -18,8 +20,10 @@ Rectangle {
         anchors.centerIn: parent
         anchors.verticalCenterOffset: 1
         color: root.textColor
+        textFormat: Text.RichText
         font.family: Theme.font
-        font.pixelSize: Theme.fontSize
+        font.pixelSize: root.fontPixelSize
+        font.bold: root.fontBold
     }
 
     MouseArea {

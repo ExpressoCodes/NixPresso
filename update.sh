@@ -1005,6 +1005,11 @@ fi
 
 if command -v hyprctl &>/dev/null && hyprctl monitors &>/dev/null 2>&1; then
     echo ""
+    local init_monitors="$HOME/.config/hypr/scripts/init-monitors.sh"
+    if [ -f "$init_monitors" ]; then
+        bold "→ Detecting monitors ..."
+        bash "$init_monitors" && ok "monitors.lua updated" || info "init-monitors.sh failed — skipping"
+    fi
     bold "→ Reloading Hyprland config ..."
     sleep 2
     hyprctl reload && ok "Hyprland config reloaded" || info "hyprctl reload failed — reload manually with: hyprctl reload"

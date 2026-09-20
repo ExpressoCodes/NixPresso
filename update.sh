@@ -6,10 +6,10 @@ VARS_FILE="/etc/nixos/.dotfiles-vars"
 HOME_STATE_DIR="$HOME/.local/share/dotfiles-home-state"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-bold()  { printf '\033[1m%s\033[0m\n' "$*"; }
-info()  { printf '  %s\n' "$*"; }
-ok()    { printf '  \033[32m✓\033[0m %s\n' "$*"; }
-skip()  { printf '  \033[33m–\033[0m %s\n' "$*"; }
+bold()  { printf '\033[1m%s\033[0m\n' "$*" >&2; }
+info()  { printf '  %s\n' "$*" >&2; }
+ok()    { printf '  \033[32m✓\033[0m %s\n' "$*" >&2; }
+skip()  { printf '  \033[33m–\033[0m %s\n' "$*" >&2; }
 
 fuzzy_pick() {
     local label="$1" items="$2" default="$3"
@@ -47,7 +47,7 @@ fuzzy_pick() {
 is_placeholder() { [[ "$1" == your* ]]; }
 
 select_timezone() {
-    echo "" >&2; bold "Timezone" >&2
+    echo "" >&2; bold "Timezone"
     local detected
     detected=$(timedatectl show --property=Timezone --value 2>/dev/null \
         || cat /etc/timezone 2>/dev/null \
@@ -62,7 +62,7 @@ select_timezone() {
 }
 
 select_locale() {
-    echo "" >&2; bold "Locale" >&2
+    echo "" >&2; bold "Locale"
     local detected
     detected=$(localectl status 2>/dev/null | awk '/System Locale/{print $3}' | cut -d= -f2 || echo "")
     is_placeholder "$detected" && detected=""
@@ -89,7 +89,7 @@ select_locale() {
 }
 
 select_keymap() {
-    echo "" >&2; bold "Keyboard layout" >&2
+    echo "" >&2; bold "Keyboard layout"
     local detected
     detected=$(localectl status 2>/dev/null | awk '/X11 Layout/{print $3}' || echo "")
     is_placeholder "$detected" && detected=""
@@ -156,10 +156,10 @@ merge_packages() {
     fi
 
     echo "" >&2
-    bold "  packages.json — upstream changes:" >&2
-    [ "$n_added"   -gt 0 ] && info "  + added:   $(echo "$added"   | jq -r 'join(", ")')" >&2
-    [ "$n_removed" -gt 0 ] && info "  - removed: $(echo "$removed" | jq -r 'join(", ")')" >&2
-    [ "$n_user"    -gt 0 ] && info "  ✓ your packages kept: $(echo "$user_kept" | jq -r 'join(", ")')" >&2
+    bold "  packages.json — upstream changes:"
+    [ "$n_added"   -gt 0 ] && info "  + added:   $(echo "$added"   | jq -r 'join(", ")')"
+    [ "$n_removed" -gt 0 ] && info "  - removed: $(echo "$removed" | jq -r 'join(", ")')"
+    [ "$n_user"    -gt 0 ] && info "  ✓ your packages kept: $(echo "$user_kept" | jq -r 'join(", ")')"
     echo "" >&2
     if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
         echo "$result"

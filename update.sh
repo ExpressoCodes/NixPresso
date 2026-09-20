@@ -10,6 +10,9 @@ info()  { printf '  %s\n' "$*"; }
 ok()    { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 skip()  { printf '  \033[33m–\033[0m %s\n' "$*"; }
 
+# shellcheck source=lib.sh
+source "$DOTFILES/lib.sh"
+
 merge_packages() {
     local base_file="$1" upstream_file="$2" current_file="$3"
 
@@ -181,15 +184,11 @@ KEYMAP="${DOTFILES_KEYMAP:-}"
 # Prompt for any vars missing from an older install, then persist them
 _vars_dirty=0
 if [ -z "$TIMEZONE" ]; then
-    _detected=$(timedatectl show --property=Timezone --value 2>/dev/null || echo "UTC")
-    read -rp "$(bold "Timezone") [$_detected]: " _tz
-    TIMEZONE="${_tz:-$_detected}"
+    select_timezone
     _vars_dirty=1
 fi
 if [ -z "$KEYMAP" ]; then
-    _detected=$(localectl status 2>/dev/null | awk '/X11 Layout/{print $3}' || echo "us")
-    read -rp "$(bold "Keyboard layout") [$_detected]: " _km
-    KEYMAP="${_km:-$_detected}"
+    select_keymap
     _vars_dirty=1
 fi
 if [ "$_vars_dirty" -eq 1 ]; then

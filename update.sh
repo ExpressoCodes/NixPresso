@@ -148,6 +148,10 @@ merge_packages() {
     [ "$n_removed" -gt 0 ] && info "  - removed: $(echo "$removed" | jq -r 'join(", ")')"
     [ "$n_user"    -gt 0 ] && info "  ✓ your packages kept: $(echo "$user_kept" | jq -r 'join(", ")')"
     echo ""
+    if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+        echo "$result"
+        return 0
+    fi
     read -rp "  $(bold "Apply these upstream changes?") [Y/n]: " ans
     ans="${ans:-y}"
     if [[ "$ans" =~ ^[Yy] ]]; then
@@ -165,9 +169,11 @@ pci_to_nix() {
 }
 
 # ── Pull latest ───────────────────────────────────────────────────────────────
-bold "→ Pulling latest changes ..."
-git -C "$DOTFILES" pull --ff-only
-echo ""
+if [[ "${1:-}" != "--no-pull" ]] && [[ "${NIXSTORE_NO_PULL:-0}" != "1" ]]; then
+    bold "→ Pulling latest changes ..."
+    git -C "$DOTFILES" pull --ff-only
+    echo ""
+fi
 
 # ── ~/.config + ~/.local/share (symlinked — already updated by git pull) ──────
 bold "→ Home config (~/.config, ~/.local/share): updated via symlinks."
@@ -188,6 +194,10 @@ if [ ! -d /etc/nixos ]; then
 fi
 
 if [ ! -f "$VARS_FILE" ]; then
+    if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+        info "No $VARS_FILE found — run install.sh first."
+        exit 1
+    fi
     bold "No $VARS_FILE found — creating it now ..."
     echo ""
 
@@ -238,10 +248,9 @@ if [ ! -f "$VARS_FILE" ]; then
     done
     _gpu="${_map[$_choice]}"
 
-    read -rp "$(bold "Timezone") [UTC]: " _tz
-    _tz="${_tz:-UTC}"
-    read -rp "$(bold "Keyboard layout") [us]: " _km
-    _km="${_km:-us}"
+    select_timezone; _tz="$TIMEZONE"
+    select_keymap;   _km="$KEYMAP"
+    select_locale;   _lc="$LOCALE"
 
     echo ""
     bold "→ Requesting sudo to write $VARS_FILE ..."
@@ -252,6 +261,7 @@ DOTFILES_USERNAME=$_un
 DOTFILES_GPU_VARIANT=$_gpu
 DOTFILES_TIMEZONE=$_tz
 DOTFILES_KEYMAP=$_km
+DOTFILES_LOCALE=$_lc
 DOTFILES_REPO=$DOTFILES
 VARSEOF
     sudo chmod 644 "$VARS_FILE"
@@ -383,6 +393,12 @@ for src in "$DOTFILES/nixos"/*; do
     bold "  $fname has local differences:"
     diff <(echo "$current") <(echo "$new") | sed 's/^/    /' || true
     echo ""
+    if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+        echo "$new" | sudo tee "$dest" > /dev/null
+        ok "updated: $fname"
+        UPDATED=1
+        continue
+    fi
     read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
     ans="${ans:-u}"
     if [[ "$ans" =~ ^[Uu] ]]; then
@@ -427,14 +443,20 @@ elif [ -n "$current" ]; then
     bold "  hardware-acceleration.nix has differences:"
     diff <(echo "$current") <(echo "$new") | sed 's/^/    /' || true
     echo ""
-    read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
-    ans="${ans:-u}"
-    if [[ "$ans" =~ ^[Uu] ]]; then
+    if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
         echo "$new" | sudo tee "$dest" > /dev/null
         ok "updated: hardware-acceleration.nix"
         UPDATED=1
     else
-        skip "kept local: hardware-acceleration.nix"
+        read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
+        ans="${ans:-u}"
+        if [[ "$ans" =~ ^[Uu] ]]; then
+            echo "$new" | sudo tee "$dest" > /dev/null
+            ok "updated: hardware-acceleration.nix"
+            UPDATED=1
+        else
+            skip "kept local: hardware-acceleration.nix"
+        fi
     fi
 else
     echo "$new" | sudo tee "$dest" > /dev/null

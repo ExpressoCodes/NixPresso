@@ -16,8 +16,8 @@ MONITORS_JSON=$(hyprctl monitors -j 2>/dev/null) || exit 0
 # Stable hash over fields that affect the config; sort by name for stability
 CURRENT_HASH=$(node -e "
 const m = JSON.parse(process.argv[1]);
-const key = m.map(({name,width,height,refreshRate,x,y,scale}) =>
-    ({name,width,height,refreshRate,x,y,scale}))
+const key = m.map(({name,width,height,refreshRate,x,y}) =>
+    ({name,width,height,refreshRate,x,y}))
   .sort((a,b) => a.name.localeCompare(b.name));
 process.stdout.write(JSON.stringify(key));
 " "$MONITORS_JSON" | sha256sum | cut -d' ' -f1)
@@ -36,9 +36,20 @@ fi
 # Build the hl.monitor() lines via node
 MONITOR_LINES=$(node -e "
 const m = JSON.parse(process.argv[1]);
-const lines = m.map(({name,width,height,refreshRate,x,y,scale}) =>
-    \`hl.monitor({ output = \\\"\${name}\\\", mode = \\\"\${width}x\${height}@\${refreshRate}\\\", position = \\\"\${x}x\${y}\\\", scale = \\\"\${scale}\\\" })\`
-);
+const lines = m.map(({name,width,height,refreshRate,x,y,physicalWidth,physicalHeight}) => {
+    let scale;
+    if (physicalWidth > 0 && physicalHeight > 0) {
+        const dpi = Math.sqrt(width*width + height*height) /
+                    Math.sqrt((physicalWidth/25.4)**2 + (physicalHeight/25.4)**2);
+        if      (dpi >= 192) scale = 2;
+        else if (dpi >= 144) scale = 1.5;
+        else if (dpi >= 120) scale = 1.25;
+        else                 scale = 1;
+    } else {
+        scale = 1;
+    }
+    return \`hl.monitor({ output = \\\"\${name}\\\", mode = \\\"\${width}x\${height}@\${refreshRate}\\\", position = \\\"\${x}x\${y}\\\", scale = \\\"\${scale}\\\" })\`;
+});
 process.stdout.write(lines.join('\n'));
 " "$MONITORS_JSON")
 

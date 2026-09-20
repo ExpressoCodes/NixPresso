@@ -164,28 +164,43 @@ bold "→ Linking ~/.config entries for $USERNAME ..."
 TARGET_HOME="/home/$USERNAME"
 CONFIG="$TARGET_HOME/.config"
 
-# nixos-rebuild creates the account but the home dir is only created on first login;
-# pre-create it here so the symlinks have somewhere to land.
-if [ ! -d "$TARGET_HOME" ]; then
-    sudo mkdir -p "$TARGET_HOME"
-    sudo chown "$USERNAME:users" "$TARGET_HOME"
-    info "created $TARGET_HOME"
-fi
-sudo mkdir -p "$CONFIG"
-
-for src in "$DOTFILES/home/.config"/*/; do
-    name="$(basename "$src")"
-    dst="$CONFIG/$name"
-    if sudo test -e "$dst" && ! sudo test -L "$dst"; then
-        info "backing up existing: $dst → $dst.bak"
-        sudo mv "$dst" "$dst.bak"
+if [ "$(whoami)" != "$USERNAME" ]; then
+    # Running as a different user (e.g. root or an installer account).
+    # Use sudo throughout and fix ownership at the end.
+    # Also pre-create the home dir: nixos-rebuild creates the account but the
+    # home dir is only made on first login.
+    if [ ! -d "$TARGET_HOME" ]; then
+        sudo mkdir -p "$TARGET_HOME"
+        sudo chown "$USERNAME:users" "$TARGET_HOME"
+        info "created $TARGET_HOME"
     fi
-    sudo ln -sfn "$src" "$dst"
-    info "linked: $dst"
-done
-
-# Hand ownership of the whole .config tree to the target user
-sudo chown -R "$USERNAME:users" "$CONFIG"
+    sudo mkdir -p "$CONFIG"
+    for src in "$DOTFILES/home/.config"/*/; do
+        name="$(basename "$src")"
+        dst="$CONFIG/$name"
+        if sudo test -e "$dst" && ! sudo test -L "$dst"; then
+            info "backing up existing: $dst → $dst.bak"
+            sudo mv "$dst" "$dst.bak"
+        fi
+        sudo ln -sfn "$src" "$dst"
+        info "linked: $dst"
+    done
+    sudo chown -R "$USERNAME:users" "$CONFIG"
+else
+    # Running as the target user — home already exists, no sudo needed,
+    # no ownership changes required.
+    mkdir -p "$CONFIG"
+    for src in "$DOTFILES/home/.config"/*/; do
+        name="$(basename "$src")"
+        dst="$CONFIG/$name"
+        if [ -e "$dst" ] && [ ! -L "$dst" ]; then
+            info "backing up existing: $dst → $dst.bak"
+            mv "$dst" "$dst.bak"
+        fi
+        ln -sfn "$src" "$dst"
+        info "linked: $dst"
+    done
+fi
 
 echo ""
 bold "Done! Log out and back in (or reboot) for all changes to take effect."

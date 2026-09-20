@@ -117,86 +117,9 @@ hl.env("HYPRCURSOR_SIZE", "24")
 ---- LOOK AND FEEL ----
 -----------------------
 
--- Refer to https://wiki.hypr.land/configuring/core/config-options/
-hl.config({
-    general = {
-        gaps_in  = 3,
-        gaps_out = 7,
-
-        border_size = 1,
-
-        col = {
-            active_border   = { colors = {"rgba(33ccffee)", "rgba(00ff99ee)"}, angle = 45 },
-            inactive_border = "rgba(595959aa)",
-        },
-
-        -- Set to true to enable resizing windows by clicking and dragging on borders and gaps
-        resize_on_border = false,
-
-        -- Please see https://wiki.hypr.land/configuring/extra/tearing/ before you turn this on
-        allow_tearing = false,
-
-        layout = "dwindle",
-    },
-
-    decoration = {
-        rounding       = 10,
-        rounding_power = 2,
-
-        -- Change transparency of focused and unfocused windows
-        active_opacity   = 1.0,
-        inactive_opacity = 1.0,
-
-        shadow = {
-            enabled      = true,
-            range        = 4,
-            render_power = 3,
-            color        = 0xee1a1a1a,
-        },
-
-        blur = {
-            enabled   = true,
-            size      = 3,
-            passes    = 1,
-            vibrancy  = 0.1696,
-        },
-    },
-
-    animations = {
-        enabled = true,
-    },
-})
-
--- Default curves and animations, see https://wiki.hypr.land/configuring/core/animations/
-hl.curve("easeOutQuint",   { type = "bezier", points = { {0.23, 1},    {0.32, 1}    } })
-hl.curve("easeInOutCubic", { type = "bezier", points = { {0.65, 0.05}, {0.36, 1}    } })
-hl.curve("linear",         { type = "bezier", points = { {0, 0},       {1, 1}       } })
-hl.curve("almostLinear",   { type = "bezier", points = { {0.5, 0.5},   {0.75, 1}    } })
-hl.curve("quick",          { type = "bezier", points = { {0.15, 0},    {0.1, 1}     } })
-
--- Default springs
-hl.curve("easy",           { type = "spring", mass = 1, stiffness = 238.1191, damping = 24.21279333 })
-
--- Overshoot bezier for rofi: snaps past final size then settles back (easeOutBack)
-hl.curve("easeOutBack",    { type = "bezier", points = { {0.175, 0.885}, {0.32, 1.275} } })
-
-hl.animation({ leaf = "global",        enabled = true,  speed = 14.29, bezier = "default" })
-hl.animation({ leaf = "border",        enabled = true,  speed = 7.7,   bezier = "easeOutQuint" })
-hl.animation({ leaf = "windows",       enabled = true,  speed = 6.84,  spring = "easy" })
-hl.animation({ leaf = "windowsIn",     enabled = true,  speed = 5.86,  spring = "easy",         style = "popin 87%" })
-hl.animation({ leaf = "windowsOut",    enabled = true,  speed = 2.13,  bezier = "linear",       style = "popin 87%" })
-hl.animation({ leaf = "fadeIn",        enabled = true,  speed = 2.47,  bezier = "almostLinear" })
-hl.animation({ leaf = "fadeOut",       enabled = true,  speed = 2.09,  bezier = "almostLinear" })
-hl.animation({ leaf = "fade",          enabled = true,  speed = 4.33,  bezier = "quick" })
-hl.animation({ leaf = "layers",        enabled = true,  speed = 5.44,  bezier = "easeOutQuint" })
-hl.animation({ leaf = "layersIn",      enabled = true,  speed = 1.5,   bezier = "easeOutQuint", style = "fade" })
-hl.animation({ leaf = "layersOut",     enabled = true,  speed = 1.5,   bezier = "linear",       style = "fade" })
-hl.animation({ leaf = "fadeLayersIn",  enabled = true,  speed = 1.5,   bezier = "almostLinear" })
-hl.animation({ leaf = "fadeLayersOut", enabled = true,  speed = 1.5,   bezier = "almostLinear" })
-hl.animation({ leaf = "workspaces",    enabled = true,  speed = 2.77,  bezier = "almostLinear", style = "fade" })
-hl.animation({ leaf = "workspacesIn",  enabled = true,  speed = 1.73,  bezier = "almostLinear", style = "fade" })
-hl.animation({ leaf = "workspacesOut", enabled = true,  speed = 2.77,  bezier = "almostLinear", style = "fade" })
-hl.animation({ leaf = "zoomFactor",    enabled = true,  speed = 10,    bezier = "quick" })
+local hypr_dir = (os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/hypr/"
+dofile(hypr_dir .. "appearance.lua")
+dofile(hypr_dir .. "animations.lua")
 
 -- Rofi pops in from 55% with a bouncy overshoot instead of the plain fade other layers get
 hl.layer_rule({
@@ -260,23 +183,7 @@ hl.config({
 ---- INPUT ----
 ---------------
 
-hl.config({
-    input = {
-        kb_layout  = "us",
-        kb_variant = "",
-        kb_model   = "",
-        kb_options = "",
-        kb_rules   = "",
-
-        follow_mouse = 1,
-
-        sensitivity = 0, -- -1.0 - 1.0, 0 means no modification.
-
-        touchpad = {
-            natural_scroll = true,
-        },
-    },
-})
+dofile(hypr_dir .. "input.lua")
 
 hl.gesture({
     fingers = 3,

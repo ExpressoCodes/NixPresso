@@ -68,7 +68,10 @@ home/.config/         # → ~/.config/  (symlinked by install.sh)
   qs-dock/            # dock settings
   kitty/              # terminal + Gruvbox Dark theme
   mako/               # notification style
-  rofi/               # launcher
+  rofi/               # launcher config
+
+home/.local/share/    # → ~/.local/share/  (symlinked by install.sh)
+  rofi/themes/        # rounded-nord-dark + rounded-common themes
 ```
 
 ---

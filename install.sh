@@ -186,6 +186,21 @@ if [ "$(whoami)" != "$USERNAME" ]; then
         info "linked: $dst"
     done
     sudo chown -R "$USERNAME:users" "$CONFIG"
+
+    bold "→ Linking ~/.local/share entries for $USERNAME ..."
+    for src in "$DOTFILES/home/.local/share"/*/; do
+        [ -d "$src" ] || continue
+        rel="${src#$DOTFILES/home/}"   # e.g. .local/share/rofi
+        dst="$TARGET_HOME/$rel"
+        sudo mkdir -p "$(dirname "$dst")"
+        if sudo test -e "$dst" && ! sudo test -L "$dst"; then
+            info "backing up existing: $dst → $dst.bak"
+            sudo mv "$dst" "$dst.bak"
+        fi
+        sudo ln -sfn "$src" "$dst"
+        info "linked: $dst"
+    done
+    sudo chown -R "$USERNAME:users" "$TARGET_HOME/.local"
 else
     # Running as the target user — home already exists, no sudo needed,
     # no ownership changes required.
@@ -193,6 +208,20 @@ else
     for src in "$DOTFILES/home/.config"/*/; do
         name="$(basename "$src")"
         dst="$CONFIG/$name"
+        if [ -e "$dst" ] && [ ! -L "$dst" ]; then
+            info "backing up existing: $dst → $dst.bak"
+            mv "$dst" "$dst.bak"
+        fi
+        ln -sfn "$src" "$dst"
+        info "linked: $dst"
+    done
+
+    bold "→ Linking ~/.local/share entries ..."
+    for src in "$DOTFILES/home/.local/share"/*/; do
+        [ -d "$src" ] || continue
+        rel="${src#$DOTFILES/home/}"   # e.g. .local/share/rofi
+        dst="$TARGET_HOME/$rel"
+        mkdir -p "$(dirname "$dst")"
         if [ -e "$dst" ] && [ ! -L "$dst" ]; then
             info "backing up existing: $dst → $dst.bak"
             mv "$dst" "$dst.bak"

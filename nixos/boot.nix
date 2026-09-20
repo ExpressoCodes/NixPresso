@@ -1,33 +1,39 @@
 { config, lib, pkgs, ... }:
+let
+  useEfi = YOUREFIMODE;          # installer substitutes: true or false
+  grubDevice = "YOURGRUBDEVICE"; # installer substitutes: e.g. /dev/vda (only used when !useEfi)
+in {
+  boot = {
+    kernelPackages = pkgs.linuxPackages_latest;
 
-{
-    boot = {
-    # Stay up-to-date on the kernel.
-      kernelPackages = pkgs.linuxPackages_latest;
-      loader = {
-        systemd-boot.editor = false;
-        # Use the systemd-boot EFI boot loader.
+    loader = lib.mkMerge [
+      (lib.mkIf useEfi {
         systemd-boot.enable = true;
+        systemd-boot.editor = false;
         efi.canTouchEfiVariables = true;
-      };
+      })
+      (lib.mkIf (!useEfi) {
+        grub = {
+          enable = true;
+          device = grubDevice;
+          useOSProber = false;
+        };
+      })
+    ];
 
-      # Silent Boot
-      kernelParams = [
-        "quiet"
-        "splash"
-        "vga=current"
-        "rd.systemd.show_status=false"
-        "rd.udev.log_level=3"
-        "udev.log_priority=3"
-      ];
-      consoleLogLevel = 0;
-    };
+    kernelParams = [
+      "quiet"
+      "splash"
+      "vga=current"
+      "rd.systemd.show_status=false"
+      "rd.udev.log_level=3"
+      "udev.log_priority=3"
+    ];
+    consoleLogLevel = 0;
 
-    # LUKS prompt
-    boot = {
-      initrd = {
-        systemd.enable = true;
-        verbose = false;
-      };
+    initrd = {
+      systemd.enable = true;
+      verbose = false;
     };
+  };
 }

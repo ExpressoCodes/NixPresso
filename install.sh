@@ -194,7 +194,32 @@ write_gpu_nix() {
     esac
 }
 
+detect_boot_mode() {
+    if [ -d /sys/firmware/efi ]; then
+        echo "efi"
+    else
+        echo "bios"
+    fi
+}
+
+detect_grub_device() {
+    local root_src disk
+    root_src=$(findmnt -n -o SOURCE / 2>/dev/null || echo "")
+    # Strip btrfs subvolume notation, e.g. /dev/sda3[/@root] → /dev/sda3
+    root_src="${root_src%%\[*}"
+    if [ -b "$root_src" ]; then
+        disk=$(lsblk -ndo pkname "$root_src" 2>/dev/null || true)
+        if [ -n "$disk" ]; then
+            echo "/dev/$disk"
+            return
+        fi
+    fi
+    # Fallback: strip trailing partition digit(s) from the path
+    echo "$root_src" | sed 's/[0-9]*$//'
+}
+
 # ── Gather config ─────────────────────────────────────────────────────────────
+
 echo ""
 bold "── NixOS Dotfiles Installer ──────────────────────────────────────"
 echo ""
@@ -232,17 +257,39 @@ if [ -d /etc/nixos ]; then
     sudo nix-channel --update
     info "channels: nixos → nixos-unstable, nixpkgs → nixpkgs-unstable"
 
+    BOOT_MODE=$(detect_boot_mode)
+    GRUB_DEVICE=""
+    if [ "$BOOT_MODE" = "bios" ]; then
+        GRUB_DEVICE=$(detect_grub_device)
+        info "BIOS/MBR system — GRUB device: $GRUB_DEVICE"
+    else
+        info "EFI system — using systemd-boot"
+    fi
+    EFI_BOOL="false"; [ "$BOOT_MODE" = "efi" ] && EFI_BOOL="true"
+
     bold "→ Copying NixOS config to /etc/nixos/ ..."
     for src in "$DOTFILES/nixos"/*; do
         [ -f "$src" ] || continue   # skip subdirectories (nixos/gpu/)
         fname="$(basename "$src")"
-        sudo sed \
-            -e "s/yourhostname/$HOSTNAME/g" \
-            -e "s/yourusername/$USERNAME/g" \
-            -e "s|yourtimezone|$TIMEZONE|g" \
-            -e "s/yourkbdlayout/$KEYMAP/g" \
-            -e "s|yourlocale|$LOCALE|g" \
-            "$src" | sudo tee "/etc/nixos/$fname" > /dev/null
+        if [ "$fname" = "boot.nix" ]; then
+            sudo sed \
+                -e "s/yourhostname/$HOSTNAME/g" \
+                -e "s/yourusername/$USERNAME/g" \
+                -e "s|yourtimezone|$TIMEZONE|g" \
+                -e "s/yourkbdlayout/$KEYMAP/g" \
+                -e "s|yourlocale|$LOCALE|g" \
+                -e "s/YOUREFIMODE/$EFI_BOOL/g" \
+                -e "s|YOURGRUBDEVICE|$GRUB_DEVICE|g" \
+                "$src" | sudo tee "/etc/nixos/$fname" > /dev/null
+        else
+            sudo sed \
+                -e "s/yourhostname/$HOSTNAME/g" \
+                -e "s/yourusername/$USERNAME/g" \
+                -e "s|yourtimezone|$TIMEZONE|g" \
+                -e "s/yourkbdlayout/$KEYMAP/g" \
+                -e "s|yourlocale|$LOCALE|g" \
+                "$src" | sudo tee "/etc/nixos/$fname" > /dev/null
+        fi
         info "wrote /etc/nixos/$fname"
     done
 
@@ -259,6 +306,8 @@ DOTFILES_TIMEZONE=$TIMEZONE
 DOTFILES_KEYMAP=$KEYMAP
 DOTFILES_LOCALE=$LOCALE
 DOTFILES_REPO=$DOTFILES
+DOTFILES_BOOT_MODE=$BOOT_MODE
+DOTFILES_GRUB_DEVICE=${GRUB_DEVICE:-}
 EOF
     sudo chmod 644 /etc/nixos/.dotfiles-vars   # readable by user services
     info "saved vars to /etc/nixos/.dotfiles-vars"
@@ -273,13 +322,25 @@ EOF
         [ -f "$src" ] || continue
         fname="$(basename "$src")"
         [ "$fname" = "flake.lock" ] && continue
-        sudo sed \
-            -e "s/yourhostname/$HOSTNAME/g" \
-            -e "s/yourusername/$USERNAME/g" \
-            -e "s|yourtimezone|$TIMEZONE|g" \
-            -e "s/yourkbdlayout/$KEYMAP/g" \
-            -e "s|yourlocale|$LOCALE|g" \
-            "$src" | sudo tee "/etc/nixos/.dotfiles-nixos-baseline/$fname" > /dev/null
+        if [ "$fname" = "boot.nix" ]; then
+            sudo sed \
+                -e "s/yourhostname/$HOSTNAME/g" \
+                -e "s/yourusername/$USERNAME/g" \
+                -e "s|yourtimezone|$TIMEZONE|g" \
+                -e "s/yourkbdlayout/$KEYMAP/g" \
+                -e "s|yourlocale|$LOCALE|g" \
+                -e "s/YOUREFIMODE/$EFI_BOOL/g" \
+                -e "s|YOURGRUBDEVICE|$GRUB_DEVICE|g" \
+                "$src" | sudo tee "/etc/nixos/.dotfiles-nixos-baseline/$fname" > /dev/null
+        else
+            sudo sed \
+                -e "s/yourhostname/$HOSTNAME/g" \
+                -e "s/yourusername/$USERNAME/g" \
+                -e "s|yourtimezone|$TIMEZONE|g" \
+                -e "s/yourkbdlayout/$KEYMAP/g" \
+                -e "s|yourlocale|$LOCALE|g" \
+                "$src" | sudo tee "/etc/nixos/.dotfiles-nixos-baseline/$fname" > /dev/null
+        fi
     done
     # hardware-acceleration.nix baseline (already written to /etc/nixos/ by write_gpu_nix)
     sudo cp /etc/nixos/hardware-acceleration.nix /etc/nixos/.dotfiles-nixos-baseline/hardware-acceleration.nix 2>/dev/null || true

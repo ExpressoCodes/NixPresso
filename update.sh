@@ -308,7 +308,11 @@ fi
 
 bold "→ Applying NixOS updates (hostname=$HOSTNAME, user=$USERNAME, gpu=$GPU_VARIANT) ..."
 bold "→ Requesting sudo ..."
-sudo -v
+if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+    sudo -n true || { info "sudo: credentials not cached — run nixstore again."; exit 1; }
+else
+    sudo -v
+fi
 ( while true; do sudo -n true; sleep 50; done ) &
 SUDO_KEEPALIVE_PID=$!
 trap 'kill "$SUDO_KEEPALIVE_PID" 2>/dev/null' EXIT

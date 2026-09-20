@@ -111,7 +111,7 @@ merge_packages() {
     local base_file="$1" upstream_file="$2" current_file="$3"
 
     if ! command -v jq &>/dev/null; then
-        info "jq not found — skipping packages.json merge (will apply after first rebuild)"
+        echo "jq not found — skipping packages.json merge (will apply after first rebuild)" >&2
         sudo cat "$current_file"
         return 0
     fi
@@ -155,12 +155,12 @@ merge_packages() {
         return 0
     fi
 
-    echo ""
-    bold "  packages.json — upstream changes:"
-    [ "$n_added"   -gt 0 ] && info "  + added:   $(echo "$added"   | jq -r 'join(", ")')"
-    [ "$n_removed" -gt 0 ] && info "  - removed: $(echo "$removed" | jq -r 'join(", ")')"
-    [ "$n_user"    -gt 0 ] && info "  ✓ your packages kept: $(echo "$user_kept" | jq -r 'join(", ")')"
-    echo ""
+    echo "" >&2
+    bold "  packages.json — upstream changes:" >&2
+    [ "$n_added"   -gt 0 ] && info "  + added:   $(echo "$added"   | jq -r 'join(", ")')" >&2
+    [ "$n_removed" -gt 0 ] && info "  - removed: $(echo "$removed" | jq -r 'join(", ")')" >&2
+    [ "$n_user"    -gt 0 ] && info "  ✓ your packages kept: $(echo "$user_kept" | jq -r 'join(", ")')" >&2
+    echo "" >&2
     if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
         echo "$result"
         return 0

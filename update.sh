@@ -206,7 +206,7 @@ _sync_home_file_interactive() {
         return
     fi
 
-    read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
+    read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans </dev/tty
     ans="${ans:-u}"
     if [[ "$ans" =~ ^[Uu] ]]; then
         cp "$src" "$dst"
@@ -277,7 +277,7 @@ _sync_one_home_file() {
             ok "updated: ~/${dst#"$HOME"/}"
             return
         fi
-        read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
+        read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans </dev/tty
         ans="${ans:-u}"
         if [[ "$ans" =~ ^[Uu] ]]; then
             cp "$src" "$dst"

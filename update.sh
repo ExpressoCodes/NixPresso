@@ -185,13 +185,20 @@ _copy_home_files() {
     [ -d "$src_base" ] || return 0
 
     while IFS= read -r -d '' src; do
-        local rel dst
+        local rel dst dir
         rel="${src#"$src_base"/}"
         dst="$dst_base/$rel"
+        dir="$(dirname "$dst")"
 
-        mkdir -p "$(dirname "$dst")"
+        # If any path component is a symlink (not a real dir), remove it
+        # so we can create a proper directory and copy real files into it.
+        [ -L "$dir" ] && rm "$dir"
+        mkdir -p "$dir"
 
-        if cmp -s "$src" "$dst" 2>/dev/null; then
+        # Remove any symlink at the destination — we want real files.
+        [ -L "$dst" ] && rm "$dst"
+
+        if [ -f "$dst" ] && cmp -s "$src" "$dst"; then
             skip "unchanged: ~/${dst#"$HOME"/}"
         else
             cp "$src" "$dst"

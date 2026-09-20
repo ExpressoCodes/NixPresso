@@ -11,7 +11,7 @@ configuration {
     sorting-method: "fzf";
 }
 
-@theme "~/.local/share/rofi/themes/rounded-nord-dark.rasi"
+@theme "rounded-nord-dark"
 
 /* Overrides on top of the theme (theme file itself left untouched) */
 listview {

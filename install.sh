@@ -486,6 +486,15 @@ else
     info "dconf not found — skipping (run ~/apply-dconf.sh after first login if needed)"
 fi
 
+if command -v hyprctl &>/dev/null && hyprctl monitors &>/dev/null 2>&1; then
+    init_monitors="$HOME/.config/hypr/scripts/init-monitors.sh"
+    if [ -f "$init_monitors" ]; then
+        echo ""
+        bold "→ Detecting monitors ..."
+        bash "$init_monitors" && bold "monitors.lua updated" || info "init-monitors.sh failed — skipping"
+    fi
+fi
+
 echo ""
 bold "Done! Log out and back in (or reboot) for all changes to take effect."
 bold "To receive future updates: ./update.sh"

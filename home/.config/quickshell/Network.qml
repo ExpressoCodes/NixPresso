@@ -18,12 +18,8 @@ BarButton {
                 for (const line of text.trim().split("\n")) {
                     const [type, state, ...rest] = line.split(":");
                     if (state !== "connected") continue;
-                    if (type === "ethernet") { s = "Wired"; break; }
-                    if (type === "wifi") {
-                        const ssid = rest.join(":").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                        s = "<span style='font-family: \"Font Awesome 7 Free Solid\";'>&#xF1EB;</span> " + ssid;
-                        break;
-                    }
+                    if (type === "ethernet") { s = "<span style='font-family: \"Font Awesome 7 Free Solid\";'>&#xF796;</span>"; break; }
+                    if (type === "wifi") { s = "<span style='font-family: \"Font Awesome 7 Free Solid\";'>&#xF1EB;</span>"; break; }
                 }
                 root.status = s;
             }

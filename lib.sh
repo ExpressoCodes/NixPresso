@@ -17,14 +17,14 @@ fuzzy_pick() {
 
     local query results count choice
     while true; do
-        printf "  \033[1m%s\033[0m (ENTER=use default '%s', or type to search): " "$label" "$default"
+        printf "  \033[1m%s\033[0m (ENTER=use default '%s', or type to search): " "$label" "$default" >&2
         read -r query
         if [ -z "$query" ]; then
             echo "$default"; return
         fi
         results=$(printf '%s\n' "$items" | grep -i "$query" || true)
         if [ -z "$results" ]; then
-            info "No matches for '$query' — try again."
+            printf '  No matches for "%s" — try again.\n' "$query" >&2
             continue
         fi
         count=$(printf '%s\n' "$results" | wc -l)
@@ -32,22 +32,22 @@ fuzzy_pick() {
             printf '%s\n' "$results"; return
         fi
         if [ "$count" -gt 20 ]; then
-            info "$count matches — showing first 20, refine to narrow further."
+            printf '  %d matches — showing first 20, refine to narrow further.\n' "$count" >&2
             results=$(printf '%s\n' "$results" | head -20)
             count=20
         fi
         local i=1
         while IFS= read -r line; do
-            printf "  %2d)  %s\n" "$i" "$line"
+            printf "  %2d)  %s\n" "$i" "$line" >&2
             (( i++ ))
         done <<< "$results"
-        printf "  Pick 1–%d, or ENTER to search again: " "$count"
+        printf "  Pick 1–%d, or ENTER to search again: " "$count" >&2
         read -r choice
         [ -z "$choice" ] && continue
         if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "$count" ]; then
             printf '%s\n' "$results" | sed -n "${choice}p"; return
         fi
-        info "Invalid — enter a number 1–$count."
+        printf '  Invalid — enter a number 1–%d.\n' "$count" >&2
     done
 }
 
@@ -57,8 +57,8 @@ is_placeholder() {
 }
 
 select_timezone() {
-    echo ""
-    bold "Timezone"
+    echo "" >&2
+    bold "Timezone" >&2
     local detected
     detected=$(timedatectl show --property=Timezone --value 2>/dev/null \
         || cat /etc/timezone 2>/dev/null \
@@ -70,12 +70,12 @@ select_timezone() {
         || find /usr/share/zoneinfo -type f ! -name '*.tab' ! -name '*.list' \
             | sed 's|.*/zoneinfo/||' | sort)
     TIMEZONE=$(fuzzy_pick "Timezone" "$zones" "${detected:-UTC}")
-    info "Selected: $TIMEZONE"
+    info "Selected: $TIMEZONE" >&2
 }
 
 select_locale() {
-    echo ""
-    bold "Locale"
+    echo "" >&2
+    bold "Locale" >&2
     local detected
     detected=$(localectl status 2>/dev/null | awk '/System Locale/{print $3}' | cut -d= -f2 || echo "")
     is_placeholder "$detected" && detected=""
@@ -99,12 +99,12 @@ select_locale() {
         sv_FI.UTF-8 sv_SE.UTF-8 th_TH.UTF-8 tr_TR.UTF-8 uk_UA.UTF-8 \
         vi_VN.UTF-8 zh_CN.UTF-8 zh_HK.UTF-8 zh_TW.UTF-8)
     LOCALE=$(fuzzy_pick "Locale" "$locales" "${detected:-en_US.UTF-8}")
-    info "Selected: $LOCALE"
+    info "Selected: $LOCALE" >&2
 }
 
 select_keymap() {
-    echo ""
-    bold "Keyboard layout"
+    echo "" >&2
+    bold "Keyboard layout" >&2
     local detected
     detected=$(localectl status 2>/dev/null | awk '/X11 Layout/{print $3}' || echo "")
     is_placeholder "$detected" && detected=""
@@ -113,5 +113,5 @@ select_keymap() {
         || find /usr/share/X11/xkb/symbols -maxdepth 1 -type f \
             | xargs -I{} basename {} | sort)
     KEYMAP=$(fuzzy_pick "Keyboard layout" "$layouts" "${detected:-us}")
-    info "Selected: $KEYMAP"
+    info "Selected: $KEYMAP" >&2
 }

@@ -258,19 +258,10 @@ _sync_one_home_file() {
         return
     fi
 
-    # No baseline: first-run migration
+    # No baseline: first-run migration — establish baseline without touching user's file
     if [ ! -f "$baseline" ]; then
-        if ! _is_text_file "$src"; then
-            cp "$src" "$dst"
-            cp "$src" "$baseline"
-            ok "updated (binary, no baseline): ~/${dst#"$HOME"/}"
-            return
-        fi
-        local bak
-        bak=$(_backup_file "$dst")
-        cp "$src" "$dst"
         cp "$src" "$baseline"
-        ok "updated (no baseline, backup: $(basename "$bak")): ~/${dst#"$HOME"/}"
+        skip "baseline established (your changes kept): ~/${dst#"$HOME"/}"
         return
     fi
 

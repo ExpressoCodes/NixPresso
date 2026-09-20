@@ -98,9 +98,68 @@ if [ ! -d /etc/nixos ]; then
 fi
 
 if [ ! -f "$VARS_FILE" ]; then
-    bold "No $VARS_FILE found."
-    info "Run ./install.sh first to set up NixOS config, then use ./update.sh for future updates."
-    exit 1
+    bold "No $VARS_FILE found — creating it now ..."
+    echo ""
+
+    read -rp "$(bold "Hostname") [$(hostname 2>/dev/null || echo nixos)]: " _hn
+    _hn="${_hn:-$(hostname 2>/dev/null || echo nixos)}"
+
+    read -rp "$(bold "Username") [$(whoami)]: " _un
+    _un="${_un:-$(whoami)}"
+
+    # GPU detection (reuse install.sh logic)
+    _detected="unknown"
+    if systemd-detect-virt --vm -q 2>/dev/null; then
+        _detected="vm"
+    else
+        _pci=$(lspci 2>/dev/null || true)
+        echo "$_pci" | grep -qi 'Virtio.*GPU\|VirtIO\|QXL paravirtual\|VMware SVGA\|VirtualBox Graph' && _detected="vm"
+        if [ "$_detected" != "vm" ]; then
+            _has_intel=false; _has_amd=false; _has_nvidia=false
+            echo "$_pci" | grep -qi 'VGA.*Intel\|Intel.*VGA\|Intel.*Graphics' && _has_intel=true
+            echo "$_pci" | grep -qi 'VGA.*AMD\|AMD.*VGA\|VGA.*ATI\|Radeon'   && _has_amd=true
+            echo "$_pci" | grep -qi 'VGA.*NVIDIA\|NVIDIA.*VGA'                && _has_nvidia=true
+            if $_has_intel && $_has_nvidia; then _detected="intel-nvidia"
+            elif $_has_amd && $_has_nvidia;  then _detected="amd-nvidia"
+            elif $_has_nvidia;               then _detected="nvidia"
+            elif $_has_amd;                  then _detected="amd"
+            elif $_has_intel;                then _detected="intel"
+            fi
+        fi
+    fi
+
+    echo ""
+    echo "  1) intel          (Intel iGPU only)"
+    echo "  2) amd            (AMD iGPU/dGPU only)"
+    echo "  3) nvidia         (NVIDIA only)"
+    echo "  4) intel-nvidia   (Intel iGPU + NVIDIA dGPU, PRIME offload)"
+    echo "  5) amd-nvidia     (AMD iGPU + NVIDIA dGPU, PRIME offload)"
+    echo "  6) vm             (virtual machine)"
+    echo ""
+    info "Detected: $_detected"
+    _map=( "" intel amd nvidia intel-nvidia amd-nvidia vm )
+    _default_idx=1
+    for _i in 1 2 3 4 5 6; do [ "${_map[$_i]}" = "$_detected" ] && _default_idx=$_i; done
+    while true; do
+        read -rp "$(bold "GPU choice") [$_default_idx]: " _choice
+        _choice="${_choice:-$_default_idx}"
+        [[ "$_choice" =~ ^[1-6]$ ]] && break
+        info "Enter a number 1–6."
+    done
+    _gpu="${_map[$_choice]}"
+
+    echo ""
+    bold "→ Requesting sudo to write $VARS_FILE ..."
+    sudo -v
+    sudo tee "$VARS_FILE" > /dev/null <<VARSEOF
+DOTFILES_HOSTNAME=$_hn
+DOTFILES_USERNAME=$_un
+DOTFILES_GPU_VARIANT=$_gpu
+DOTFILES_REPO=$DOTFILES
+VARSEOF
+    sudo chmod 644 "$VARS_FILE"
+    ok "Created $VARS_FILE"
+    echo ""
 fi
 
 # Load saved values from install

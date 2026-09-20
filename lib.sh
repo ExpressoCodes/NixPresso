@@ -2,123 +2,52 @@
 # Not executable directly.
 
 # fuzzy_pick LABEL ITEMS DEFAULT
-# Live-filter picker: type to narrow the list, arrows to move, ENTER to select.
-# Uses fzf when available; otherwise a built-in read-char loop.
+# Uses fzf when available (live filter). Otherwise: type a search term to
+# filter the list, pick by number. ENTER alone always accepts the default.
 fuzzy_pick() {
     local label="$1" items="$2" default="$3"
 
-    # ── fzf path ──────────────────────────────────────────────────────────────
     if command -v fzf &>/dev/null; then
         local result
         result=$(printf '%s\n' "$items" | fzf --height=40% --reverse \
             --prompt="$label > " --query="$default" --select-1 --exit-0 2>/dev/null) \
             && { echo "$result"; return; }
-        # ESC/Ctrl-C — fall through to built-in picker
+        # ESC/Ctrl-C from fzf — fall through to text picker
     fi
 
-    # ── built-in live-filter picker ───────────────────────────────────────────
-    # Reads one character at a time; redraws a filtered list after each keypress.
-    local query="$default"
-    local selected=0  # 0-indexed cursor into filtered list
-
-    # Hide cursor, enable raw input
-    tput civis 2>/dev/null || true
-    # Restore terminal on exit
-    _fuzzy_cleanup() { tput cnorm 2>/dev/null || true; stty sane 2>/dev/null || true; }
-    trap _fuzzy_cleanup RETURN INT TERM
-
-    stty -echo -icanon min 1 time 0 2>/dev/null
-
-    local LINES_DRAWN=0
-
+    local query results count choice
     while true; do
-        # Build filtered list
-        local filtered
+        printf "  \033[1m%s\033[0m (ENTER=use default '%s', or type to search): " "$label" "$default"
+        read -r query
         if [ -z "$query" ]; then
-            filtered=$(printf '%s\n' "$items")
-        else
-            filtered=$(printf '%s\n' "$items" | grep -i "$query" || true)
+            echo "$default"; return
         fi
-
-        local total
-        total=$(printf '%s\n' "$filtered" | grep -c '' 2>/dev/null || echo 0)
-        [ -z "$filtered" ] && total=0
-
-        # Clamp cursor
-        [ "$selected" -ge "$total" ] && selected=$(( total > 0 ? total - 1 : 0 ))
-        [ "$selected" -lt 0 ] && selected=0
-
-        # Erase previously drawn lines
-        local i
-        for (( i=0; i<LINES_DRAWN; i++ )); do
-            printf '\033[A\033[2K'
-        done
-        LINES_DRAWN=0
-
-        # Header
-        printf "  \033[1m%s\033[0m > %s\n" "$label" "$query"
-        (( LINES_DRAWN++ ))
-
-        if [ "$total" -eq 0 ]; then
-            printf "  \033[33mno matches\033[0m\n"
-            (( LINES_DRAWN++ ))
-        else
-            local show=10
-            local start=$(( selected > show/2 ? selected - show/2 : 0 ))
-            [ $(( start + show )) -gt "$total" ] && start=$(( total - show > 0 ? total - show : 0 ))
-            local end=$(( start + show < total ? start + show : total ))
-            local idx
-            for (( idx=start; idx<end; idx++ )); do
-                local line
-                line=$(printf '%s\n' "$filtered" | sed -n "$(( idx+1 ))p")
-                if [ "$idx" -eq "$selected" ]; then
-                    printf "  \033[7m %s \033[0m\n" "$line"
-                else
-                    printf "   %s\n" "$line"
-                fi
-                (( LINES_DRAWN++ ))
-            done
-            [ "$total" -gt "$show" ] && {
-                printf "  \033[2m(%d more — keep typing to narrow)\033[0m\n" $(( total - show ))
-                (( LINES_DRAWN++ ))
-            }
+        results=$(printf '%s\n' "$items" | grep -i "$query" || true)
+        if [ -z "$results" ]; then
+            info "No matches for '$query' — try again."
+            continue
         fi
-        printf "  \033[2mENTER=select  ↑↓=move  BACKSPACE=erase  ESC=use default (%s)\033[0m\n" "$default"
-        (( LINES_DRAWN++ ))
-
-        # Read one char (or escape sequence)
-        local ch esc
-        IFS= read -r -d '' -n1 ch
-        if [ "$ch" = $'\x1b' ]; then
-            IFS= read -r -d '' -n1 -t 0.05 esc || true
-            if [ "$esc" = '[' ]; then
-                IFS= read -r -d '' -n1 -t 0.05 esc || true
-                case "$esc" in
-                    A) (( selected-- )) ;;   # up
-                    B) (( selected++ )) ;;   # down
-                esac
-            else
-                # bare ESC — use default
-                _fuzzy_cleanup
-                printf '\n'
-                echo "$default"; return
-            fi
-        elif [ "$ch" = $'\x7f' ] || [ "$ch" = $'\b' ]; then
-            query="${query%?}"
-            selected=0
-        elif [ "$ch" = $'\n' ] || [ "$ch" = $'\r' ] || [ -z "$ch" ]; then
-            _fuzzy_cleanup
-            printf '\n'
-            if [ "$total" -gt 0 ]; then
-                printf '%s\n' "$filtered" | sed -n "$(( selected+1 ))p"
-            else
-                echo "$default"
-            fi
-            return
-        elif [[ "$ch" =~ [[:print:]] ]]; then
-            query+="$ch"
-            selected=0
+        count=$(printf '%s\n' "$results" | wc -l)
+        if [ "$count" -eq 1 ]; then
+            printf '%s\n' "$results"; return
         fi
+        if [ "$count" -gt 20 ]; then
+            info "$count matches — showing first 20, refine to narrow further."
+            results=$(printf '%s\n' "$results" | head -20)
+            count=20
+        fi
+        local i=1
+        while IFS= read -r line; do
+            printf "  %2d)  %s\n" "$i" "$line"
+            (( i++ ))
+        done <<< "$results"
+        printf "  Pick 1–%d, or ENTER to search again: " "$count"
+        read -r choice
+        [ -z "$choice" ] && continue
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "$count" ]; then
+            printf '%s\n' "$results" | sed -n "${choice}p"; return
+        fi
+        info "Invalid — enter a number 1–$count."
     done
 }
 

@@ -517,14 +517,26 @@ GRUB_DEVICE="${DOTFILES_GRUB_DEVICE:-}"
 # Prompt for any vars missing from an older install, then persist them
 _vars_dirty=0
 if [ -z "$TIMEZONE" ]; then
+    if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+        info "TIMEZONE not set in $VARS_FILE — run install.sh to configure it."
+        exit 1
+    fi
     select_timezone
     _vars_dirty=1
 fi
 if [ -z "$KEYMAP" ]; then
+    if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+        info "KEYMAP not set in $VARS_FILE — run install.sh to configure it."
+        exit 1
+    fi
     select_keymap
     _vars_dirty=1
 fi
 if [ -z "$LOCALE" ]; then
+    if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+        info "LOCALE not set in $VARS_FILE — run install.sh to configure it."
+        exit 1
+    fi
     select_locale
     _vars_dirty=1
 fi

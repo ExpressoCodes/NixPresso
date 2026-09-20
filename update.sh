@@ -670,20 +670,19 @@ for src in "$DOTFILES/nixos"/*; do
         continue
     fi
 
-    # No baseline: first-run — show diff and ask
+    # No baseline: first-run — show diff and ask, defaulting to keep local
     if ! sudo test -f "$baseline_file"; then
         echo ""
         bold "  $fname differs from dotfiles:"
         diff <(echo "$current") <(echo "$new") | sed 's/^/    /' || true
         echo ""
         if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
-            echo "$new" | sudo tee "$dest" > /dev/null
+            # Non-interactive: keep local changes; record baseline for future diffs.
             echo "$new" | sudo tee "$baseline_file" > /dev/null
-            ok "updated: $fname"
-            UPDATED=1
+            skip "kept local (first-run, baseline recorded): $fname"
         else
-            read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
-            ans="${ans:-u}"
+            read -rp "  [U]pdate (overwrite with upstream) / [S]kip (keep local) [s]: " ans
+            ans="${ans:-s}"
             if [[ "$ans" =~ ^[Uu] ]]; then
                 echo "$new" | sudo tee "$dest" > /dev/null
                 echo "$new" | sudo tee "$baseline_file" > /dev/null
@@ -854,13 +853,11 @@ elif ! sudo test -f "$ha_baseline_file"; then
     diff <(echo "$current") <(echo "$new") | sed 's/^/    /' || true
     echo ""
     if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
-        echo "$new" | sudo tee "$dest" > /dev/null
         echo "$new" | sudo tee "$ha_baseline_file" > /dev/null
-        ok "updated: hardware-acceleration.nix"
-        UPDATED=1
+        skip "kept local (first-run, baseline recorded): hardware-acceleration.nix"
     else
-        read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
-        ans="${ans:-u}"
+        read -rp "  [U]pdate (overwrite with upstream) / [S]kip (keep local) [s]: " ans
+        ans="${ans:-s}"
         if [[ "$ans" =~ ^[Uu] ]]; then
             echo "$new" | sudo tee "$dest" > /dev/null
             echo "$new" | sudo tee "$ha_baseline_file" > /dev/null

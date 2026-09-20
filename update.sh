@@ -258,10 +258,35 @@ _sync_one_home_file() {
         return
     fi
 
-    # No baseline: first-run migration — establish baseline without touching user's file
+    # No baseline: first-run — show diff and ask (mirrors NixOS behaviour)
     if [ ! -f "$baseline" ]; then
-        cp "$src" "$baseline"
-        skip "baseline established (your changes kept): ~/${dst#"$HOME"/}"
+        if ! _is_text_file "$src"; then
+            # Binary, no baseline — apply silently
+            cp "$src" "$dst"
+            cp "$src" "$baseline"
+            ok "updated (binary): ~/${dst#"$HOME"/}"
+            return
+        fi
+        echo ""
+        bold "  ~/${dst#"$HOME"/} differs from dotfiles:"
+        diff "$dst" "$src" | sed 's/^/    /' || true
+        echo ""
+        if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
+            cp "$src" "$dst"
+            cp "$src" "$baseline"
+            ok "updated: ~/${dst#"$HOME"/}"
+            return
+        fi
+        read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans
+        ans="${ans:-u}"
+        if [[ "$ans" =~ ^[Uu] ]]; then
+            cp "$src" "$dst"
+            cp "$src" "$baseline"
+            ok "updated: ~/${dst#"$HOME"/}"
+        else
+            cp "$src" "$baseline"
+            skip "kept local (baseline recorded): ~/${dst#"$HOME"/}"
+        fi
         return
     fi
 

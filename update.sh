@@ -701,6 +701,14 @@ echo ""
 bold "→ Running nixos-rebuild switch ..."
 sudo nixos-rebuild switch --flake "/etc/nixos#$HOSTNAME"
 
+if command -v flatpak &>/dev/null; then
+    echo ""
+    bold "→ Ensuring Flathub remote ..."
+    flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo \
+        && ok "Flathub remote ready" \
+        || info "flatpak remote-add failed — run manually if needed"
+fi
+
 if command -v hyprctl &>/dev/null && hyprctl monitors &>/dev/null 2>&1; then
     echo ""
     bold "→ Reloading Hyprland config ..."

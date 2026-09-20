@@ -361,9 +361,9 @@ for src in "$DOTFILES/nixos"/*; do
     new=$(sed \
         -e "s/yourhostname/$HOSTNAME/g" \
         -e "s/yourusername/$USERNAME/g" \
-        -e "s/yourtimezone/$TIMEZONE/g" \
+        -e "s|yourtimezone|$TIMEZONE|g" \
         -e "s/yourkbdlayout/$KEYMAP/g" \
-        -e "s/yourlocale/$LOCALE/g" \
+        -e "s|yourlocale|$LOCALE|g" \
         "$src")
 
     if [ ! -f "$dest" ]; then

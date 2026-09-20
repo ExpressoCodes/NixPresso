@@ -511,6 +511,8 @@ TIMEZONE="${DOTFILES_TIMEZONE:-}"
 KEYMAP="${DOTFILES_KEYMAP:-}"
 LOCALE="${DOTFILES_LOCALE:-}"
 DOTFILES_REPO="${DOTFILES_REPO:-}"
+BOOT_MODE="${DOTFILES_BOOT_MODE:-}"
+GRUB_DEVICE="${DOTFILES_GRUB_DEVICE:-}"
 
 # Prompt for any vars missing from an older install, then persist them
 _vars_dirty=0
@@ -530,6 +532,17 @@ if [ -z "$DOTFILES_REPO" ]; then
     DOTFILES_REPO="$DOTFILES"
     _vars_dirty=1
 fi
+if [ -z "$BOOT_MODE" ]; then
+    BOOT_MODE="$( [ -d /sys/firmware/efi ] && echo efi || echo bios )"
+    _vars_dirty=1
+fi
+if [ -z "$GRUB_DEVICE" ] && [ "$BOOT_MODE" = "bios" ]; then
+    _root_src=$(findmnt -n -o SOURCE / 2>/dev/null || true)
+    _root_src="${_root_src%%\[*}"
+    _disk=$(lsblk -ndo pkname "$_root_src" 2>/dev/null || true)
+    [ -n "$_disk" ] && GRUB_DEVICE="/dev/$_disk" || GRUB_DEVICE="${_root_src%%[0-9]*}"
+    _vars_dirty=1
+fi
 if [ "$_vars_dirty" -eq 1 ]; then
     sudo tee "$VARS_FILE" > /dev/null <<VARSEOF
 DOTFILES_HOSTNAME=$HOSTNAME
@@ -539,6 +552,8 @@ DOTFILES_TIMEZONE=$TIMEZONE
 DOTFILES_KEYMAP=$KEYMAP
 DOTFILES_LOCALE=$LOCALE
 DOTFILES_REPO=${DOTFILES_REPO:-$DOTFILES}
+DOTFILES_BOOT_MODE=$BOOT_MODE
+DOTFILES_GRUB_DEVICE=${GRUB_DEVICE:-}
 VARSEOF
     ok "saved new vars to $VARS_FILE"
 fi
@@ -605,12 +620,15 @@ for src in "$DOTFILES/nixos"/*; do
     fi
 
     # All other files: generate substituted version and diff
+    _efi_bool="false"; [ "$BOOT_MODE" = "efi" ] && _efi_bool="true"
     new=$(sed \
         -e "s/yourhostname/$HOSTNAME/g" \
         -e "s/yourusername/$USERNAME/g" \
         -e "s|yourtimezone|$TIMEZONE|g" \
         -e "s/yourkbdlayout/$KEYMAP/g" \
         -e "s|yourlocale|$LOCALE|g" \
+        -e "s/YOUREFIMODE/$_efi_bool/g" \
+        -e "s|YOURGRUBDEVICE|${GRUB_DEVICE:-}|g" \
         "$src")
 
     baseline_file="$NIXOS_BASELINE_DIR/$fname"

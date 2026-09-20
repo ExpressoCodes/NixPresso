@@ -201,11 +201,19 @@ _link_home_files() {
                 skip "ok: ~/${dst#"$HOME"/}"
             else
                 ln -sf "$src" "$dst"
-                ok "updated: ~/${dst#"$HOME"/}"
+                ok "updated symlink: ~/${dst#"$HOME"/}"
                 UPDATED=1
             fi
         elif [ -e "$dst" ]; then
-            info "SKIP (real file exists): ~/${dst#"$HOME"/}"
+            # Real file exists — replace with symlink if contents match dotfiles,
+            # warn and leave alone if there are local differences.
+            if cmp -s "$src" "$dst"; then
+                ln -sf "$src" "$dst"
+                ok "replaced with symlink: ~/${dst#"$HOME"/}"
+                UPDATED=1
+            else
+                info "SKIP (local changes): ~/${dst#"$HOME"/}"
+            fi
         else
             ln -s "$src" "$dst"
             ok "linked: ~/${dst#"$HOME"/}"

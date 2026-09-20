@@ -95,9 +95,14 @@ select_keymap() {
     detected=$(localectl status 2>/dev/null | awk '/X11 Layout/{print $3}' || echo "")
     is_placeholder "$detected" && detected=""
     local layouts
-    layouts=$(localectl list-x11-keymap-layouts 2>/dev/null \
-        || find /usr/share/X11/xkb/symbols -maxdepth 1 -type f \
-            | xargs -I{} basename {} | sort)
+    layouts=$(localectl list-x11-keymap-layouts 2>/dev/null || true)
+    if [ -z "$layouts" ]; then
+        local xkb_dir
+        xkb_dir=$(find /run/current-system/sw/share/X11/xkb/symbols \
+            /usr/share/X11/xkb/symbols -maxdepth 0 -type d 2>/dev/null | head -1 || true)
+        [ -n "$xkb_dir" ] && layouts=$(find "$xkb_dir" -maxdepth 1 -type f \
+            | xargs -I{} basename {} | sort 2>/dev/null || true)
+    fi
     KEYMAP=$(fuzzy_pick "Keyboard layout" "$layouts" "${detected:-us}")
     info "Selected: $KEYMAP"
 }
@@ -256,6 +261,24 @@ EOF
     sudo cp "$DOTFILES/nixos/packages.json" /etc/nixos/.dotfiles-packages-base.json
     info "saved packages baseline to /etc/nixos/.dotfiles-packages-base.json"
 
+    # Seed NixOS baseline so update.sh knows what was just installed
+    sudo mkdir -p /etc/nixos/.dotfiles-nixos-baseline
+    for src in "$DOTFILES/nixos"/*; do
+        [ -f "$src" ] || continue
+        fname="$(basename "$src")"
+        [ "$fname" = "flake.lock" ] && continue
+        sudo sed \
+            -e "s/yourhostname/$HOSTNAME/g" \
+            -e "s/yourusername/$USERNAME/g" \
+            -e "s/yourtimezone/$TIMEZONE/g" \
+            -e "s/yourkbdlayout/$KEYMAP/g" \
+            -e "s/yourlocale/$LOCALE/g" \
+            "$src" | sudo tee "/etc/nixos/.dotfiles-nixos-baseline/$fname" > /dev/null
+    done
+    # hardware-acceleration.nix baseline (already written to /etc/nixos/ by write_gpu_nix)
+    sudo cp /etc/nixos/hardware-acceleration.nix /etc/nixos/.dotfiles-nixos-baseline/hardware-acceleration.nix 2>/dev/null || true
+    info "seeded NixOS baseline in /etc/nixos/.dotfiles-nixos-baseline/"
+
     if [ ! -f /etc/nixos/hardware-configuration.nix ]; then
         bold "→ Generating hardware-configuration.nix ..."
         sudo nixos-generate-config
@@ -314,6 +337,25 @@ if [ "$(whoami)" != "$USERNAME" ]; then
         info "linked: $dst"
     done
     sudo chown -R "$USERNAME:users" "$TARGET_HOME/.local"
+
+    bold "→ Linking ~/.local/bin entries for $USERNAME ..."
+    local_bin_src="$DOTFILES/home/.local/bin"
+    if [ -d "$local_bin_src" ]; then
+        dst_bin="$TARGET_HOME/.local/bin"
+        sudo mkdir -p "$dst_bin"
+        for src in "$local_bin_src"/*; do
+            [ -e "$src" ] || continue
+            name="$(basename "$src")"
+            dst="$dst_bin/$name"
+            if sudo test -e "$dst" && ! sudo test -L "$dst"; then
+                sudo mv "$dst" "$dst.bak"
+            fi
+            sudo ln -sfn "$src" "$dst"
+            sudo chmod +x "$dst"
+            info "linked: $dst"
+        done
+        sudo chown -R "$USERNAME:users" "$dst_bin"
+    fi
 else
     # Running as the target user — home already exists, no sudo needed,
     # no ownership changes required.
@@ -342,6 +384,24 @@ else
         ln -sfn "$src" "$dst"
         info "linked: $dst"
     done
+
+    bold "→ Linking ~/.local/bin entries ..."
+    local_bin_src="$DOTFILES/home/.local/bin"
+    if [ -d "$local_bin_src" ]; then
+        dst_bin="$TARGET_HOME/.local/bin"
+        mkdir -p "$dst_bin"
+        for src in "$local_bin_src"/*; do
+            [ -e "$src" ] || continue
+            name="$(basename "$src")"
+            dst="$dst_bin/$name"
+            if [ -e "$dst" ] && [ ! -L "$dst" ]; then
+                mv "$dst" "$dst.bak"
+            fi
+            ln -sfn "$src" "$dst"
+            chmod +x "$dst"
+            info "linked: $dst"
+        done
+    fi
 fi
 
 # ── dconf settings ────────────────────────────────────────────────────────────

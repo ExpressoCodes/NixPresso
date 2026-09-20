@@ -110,6 +110,12 @@ select_keymap() {
 merge_packages() {
     local base_file="$1" upstream_file="$2" current_file="$3"
 
+    if ! command -v jq &>/dev/null; then
+        info "jq not found — skipping packages.json merge (will apply after first rebuild)"
+        sudo cat "$current_file"
+        return 0
+    fi
+
     # 3-way merge: respect both upstream changes and user changes
     local result
     result=$(jq -n \

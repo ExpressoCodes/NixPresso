@@ -1015,5 +1015,19 @@ if command -v hyprctl &>/dev/null && hyprctl monitors &>/dev/null 2>&1; then
     hyprctl reload && ok "Hyprland config reloaded" || info "hyprctl reload failed — reload manually with: hyprctl reload"
 fi
 
+# ── Wallpapers ────────────────────────────────────────────────────────────────
+if [ -d "$DOTFILES/wallpapers" ]; then
+    bold "→ Installing wallpapers to ~/Pictures/Wallpapers/ ..."
+    mkdir -p ~/Pictures/Wallpapers
+    _wp_copied=0
+    for _f in "$DOTFILES/wallpapers"/*; do
+        [ -f "$_f" ] || continue
+        if cp -n "$_f" ~/Pictures/Wallpapers/ 2>/dev/null; then
+            _wp_copied=$((_wp_copied + 1))
+        fi
+    done
+    ok "Copied $_wp_copied wallpaper(s) to ~/Pictures/Wallpapers/"
+fi
+
 echo ""
 bold "Done!"

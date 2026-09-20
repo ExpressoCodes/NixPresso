@@ -94,9 +94,15 @@ select_keymap() {
     detected=$(localectl status 2>/dev/null | awk '/X11 Layout/{print $3}' || echo "")
     is_placeholder "$detected" && detected=""
     local layouts
-    layouts=$(localectl list-x11-keymap-layouts 2>/dev/null \
-        || find /usr/share/X11/xkb/symbols -maxdepth 1 -type f \
-            | xargs -I{} basename {} | sort)
+    layouts=$(localectl list-x11-keymap-layouts 2>/dev/null || true)
+    if [ -z "$layouts" ]; then
+        # NixOS: X11 data lives in the Nix store, not /usr/share
+        local xkb_dir
+        xkb_dir=$(find /run/current-system/sw/share/X11/xkb/symbols \
+            /usr/share/X11/xkb/symbols -maxdepth 0 -type d 2>/dev/null | head -1 || true)
+        [ -n "$xkb_dir" ] && layouts=$(find "$xkb_dir" -maxdepth 1 -type f \
+            | xargs -I{} basename {} | sort 2>/dev/null || true)
+    fi
     KEYMAP=$(fuzzy_pick "Keyboard layout" "$layouts" "${detected:-us}")
     info "Selected: $KEYMAP"
 }

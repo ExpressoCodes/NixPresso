@@ -226,6 +226,12 @@ fi
 
 # ── NixOS system config ───────────────────────────────────────────────────────
 if [ -d /etc/nixos ]; then
+    bold "→ Adding NixOS unstable channels ..."
+    sudo nix-channel --add https://nixos.org/channels/nixos-unstable nixos
+    sudo nix-channel --add https://nixos.org/channels/nixpkgs-unstable nixpkgs
+    sudo nix-channel --update
+    info "channels: nixos → nixos-unstable, nixpkgs → nixpkgs-unstable"
+
     bold "→ Copying NixOS config to /etc/nixos/ ..."
     for src in "$DOTFILES/nixos"/*; do
         [ -f "$src" ] || continue   # skip subdirectories (nixos/gpu/)

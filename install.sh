@@ -110,6 +110,7 @@ HOSTNAME=$(ask "Hostname" "$(hostname 2>/dev/null || echo nixos)")
 USERNAME=$(ask "Username" "$(whoami)")
 select_timezone
 select_keymap
+select_locale
 
 if [ -d /etc/nixos ]; then
     _detected="$(detect_gpu)"
@@ -142,6 +143,7 @@ if [ -d /etc/nixos ]; then
             -e "s/yourusername/$USERNAME/g" \
             -e "s/yourtimezone/$TIMEZONE/g" \
             -e "s/yourkbdlayout/$KEYMAP/g" \
+            -e "s/yourlocale/$LOCALE/g" \
             "$src" | sudo tee "/etc/nixos/$fname" > /dev/null
         info "wrote /etc/nixos/$fname"
     done
@@ -157,6 +159,7 @@ DOTFILES_USERNAME=$USERNAME
 DOTFILES_GPU_VARIANT=$GPU_VARIANT
 DOTFILES_TIMEZONE=$TIMEZONE
 DOTFILES_KEYMAP=$KEYMAP
+DOTFILES_LOCALE=$LOCALE
 DOTFILES_REPO=$DOTFILES
 EOF
     sudo chmod 644 /etc/nixos/.dotfiles-vars   # readable by user services

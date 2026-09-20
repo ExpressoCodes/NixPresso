@@ -70,6 +70,25 @@ select_timezone() {
     info "Selected: $TIMEZONE"
 }
 
+select_locale() {
+    echo ""
+    bold "Locale"
+    local detected
+    detected=$(localectl status 2>/dev/null | awk '/System Locale/{print $3}' | cut -d= -f2 || echo "")
+    is_placeholder "$detected" && detected=""
+    [ -z "$detected" ] && detected="${LANG:-}"
+    [ -z "$detected" ] && detected="en_US.UTF-8"
+    local locales
+    locales=$(locale -a 2>/dev/null | grep -E 'UTF-8|utf8' | sed 's/utf8/UTF-8/' | sort -u \
+        || printf '%s\n' \
+            en_US.UTF-8 en_GB.UTF-8 en_IE.UTF-8 en_AU.UTF-8 en_CA.UTF-8 \
+            de_DE.UTF-8 fr_FR.UTF-8 es_ES.UTF-8 it_IT.UTF-8 pt_PT.UTF-8 \
+            pt_BR.UTF-8 nl_NL.UTF-8 pl_PL.UTF-8 ru_RU.UTF-8 ja_JP.UTF-8 \
+            zh_CN.UTF-8 zh_TW.UTF-8 ko_KR.UTF-8 ar_SA.UTF-8 tr_TR.UTF-8)
+    LOCALE=$(fuzzy_pick "Locale" "$locales" "$detected")
+    info "Selected: $LOCALE"
+}
+
 select_keymap() {
     echo ""
     bold "Keyboard layout"

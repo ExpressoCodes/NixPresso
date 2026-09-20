@@ -189,10 +189,10 @@ hl.animation({ leaf = "fadeIn",        enabled = true,  speed = 2.47,  bezier = 
 hl.animation({ leaf = "fadeOut",       enabled = true,  speed = 2.09,  bezier = "almostLinear" })
 hl.animation({ leaf = "fade",          enabled = true,  speed = 4.33,  bezier = "quick" })
 hl.animation({ leaf = "layers",        enabled = true,  speed = 5.44,  bezier = "easeOutQuint" })
-hl.animation({ leaf = "layersIn",      enabled = true,  speed = 5.71,  bezier = "easeOutQuint", style = "fade" })
-hl.animation({ leaf = "layersOut",     enabled = true,  speed = 2.14,  bezier = "linear",       style = "fade" })
-hl.animation({ leaf = "fadeLayersIn",  enabled = true,  speed = 2.56,  bezier = "almostLinear" })
-hl.animation({ leaf = "fadeLayersOut", enabled = true,  speed = 1.99,  bezier = "almostLinear" })
+hl.animation({ leaf = "layersIn",      enabled = true,  speed = 1.5,   bezier = "easeOutQuint", style = "fade" })
+hl.animation({ leaf = "layersOut",     enabled = true,  speed = 1.5,   bezier = "linear",       style = "fade" })
+hl.animation({ leaf = "fadeLayersIn",  enabled = true,  speed = 1.5,   bezier = "almostLinear" })
+hl.animation({ leaf = "fadeLayersOut", enabled = true,  speed = 1.5,   bezier = "almostLinear" })
 hl.animation({ leaf = "workspaces",    enabled = true,  speed = 2.77,  bezier = "almostLinear", style = "fade" })
 hl.animation({ leaf = "workspacesIn",  enabled = true,  speed = 1.73,  bezier = "almostLinear", style = "fade" })
 hl.animation({ leaf = "workspacesOut", enabled = true,  speed = 2.77,  bezier = "almostLinear", style = "fade" })
@@ -201,7 +201,7 @@ hl.animation({ leaf = "zoomFactor",    enabled = true,  speed = 10,    bezier = 
 -- Rofi pops in from 55% with a bouncy overshoot instead of the plain fade other layers get
 hl.layer_rule({
     match     = { namespace = "^rofi$" },
-    animation = "popin 55% 9 easeOutBack",
+    animation = "popin 55% 6 easeOutBack",
 })
 
 -- Ref https://wiki.hypr.land/configuring/core/rules/workspace-rules/

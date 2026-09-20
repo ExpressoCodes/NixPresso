@@ -175,59 +175,34 @@ if [[ "${1:-}" != "--no-pull" ]] && [[ "${NIXSTORE_NO_PULL:-0}" != "1" ]]; then
     echo ""
 fi
 
-# ── ~/.config + ~/.local/share (file-level symlinks from dotfiles/home/) ──────
+# ── ~/.config + ~/.local/share (copied from dotfiles/home/) ──────────────────
 bold "→ Syncing home config (~/.config, ~/.local/share) ..."
 
-# Walk every file under $DOTFILES/home/ recursively and create a symlink
-# at the matching path under $HOME.  Parent directories are created as
-# real dirs (never deleted).  Existing symlinks pointing elsewhere are
-# updated.  Existing real files are left alone with a clear SKIP notice.
-_link_home_files() {
+_copy_home_files() {
     local src_base="$1"   # e.g. $DOTFILES/home/.config
     local dst_base="$2"   # e.g. $HOME/.config
 
     [ -d "$src_base" ] || return 0
 
     while IFS= read -r -d '' src; do
-        local rel dst dir
+        local rel dst
         rel="${src#"$src_base"/}"
         dst="$dst_base/$rel"
-        dir="$(dirname "$dst")"
 
-        mkdir -p "$dir"
+        mkdir -p "$(dirname "$dst")"
 
-        # Already correct — src and dst resolve to the same inode (e.g. parent
-        # dir is already a symlink into dotfiles). Never call ln in this case.
-        if [ "$(realpath "$dst" 2>/dev/null)" = "$(realpath "$src")" ]; then
-            skip "ok: ~/${dst#"$HOME"/}"
-            continue
-        fi
-
-        if [ -L "$dst" ]; then
-            # Symlink exists but points somewhere else — retarget it
-            ln -sf "$src" "$dst"
-            ok "updated symlink: ~/${dst#"$HOME"/}"
-            UPDATED=1
-        elif [ -e "$dst" ]; then
-            # Real file — replace with symlink if contents match, else warn
-            if cmp -s "$src" "$dst"; then
-                rm "$dst"
-                ln -s "$src" "$dst"
-                ok "replaced with symlink: ~/${dst#"$HOME"/}"
-                UPDATED=1
-            else
-                info "SKIP (local changes): ~/${dst#"$HOME"/}"
-            fi
+        if cmp -s "$src" "$dst" 2>/dev/null; then
+            skip "unchanged: ~/${dst#"$HOME"/}"
         else
-            ln -s "$src" "$dst"
-            ok "linked: ~/${dst#"$HOME"/}"
+            cp "$src" "$dst"
+            ok "copied: ~/${dst#"$HOME"/}"
             UPDATED=1
         fi
     done < <(find "$src_base" -type f -print0)
 }
 
-_link_home_files "$DOTFILES/home/.config"       "$HOME/.config"
-_link_home_files "$DOTFILES/home/.local/share"  "$HOME/.local/share"
+_copy_home_files "$DOTFILES/home/.config"      "$HOME/.config"
+_copy_home_files "$DOTFILES/home/.local/share" "$HOME/.local/share"
 echo ""
 
 # ── dconf settings ────────────────────────────────────────────────────────────

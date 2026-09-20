@@ -79,8 +79,8 @@ bold "→ Pulling latest changes ..."
 git -C "$DOTFILES" pull --ff-only
 echo ""
 
-# ── ~/.config (symlinked — already updated by git pull) ───────────────────────
-bold "→ Home config (~/.config): updated via symlinks."
+# ── ~/.config + ~/.local/share (symlinked — already updated by git pull) ──────
+bold "→ Home config (~/.config, ~/.local/share): updated via symlinks."
 echo ""
 
 # ── NixOS config ──────────────────────────────────────────────────────────────

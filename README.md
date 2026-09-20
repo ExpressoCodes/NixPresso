@@ -18,9 +18,20 @@ NixOS + Hyprland desktop. Clone and run one script to get the full setup on any 
 
 ---
 
-## Install
+## Requirements
 
-Requires a running NixOS system (any base install).
+- **NixOS** already installed (any base install — graphical or minimal)
+- **Git** available in the current shell (`nix-shell -p git` works on a fresh install)
+- **jq** — used by `update.sh` for package merging (`nix-shell -p jq`)
+- **pciutils** (`lspci`) — used at install/update time to detect GPU bus IDs
+- **sudo** access for the installing user
+- Enough disk space for a NixOS rebuild (~2 GB for the initial closure)
+
+`dconf` is optional — only needed if you want GNOME/GTK settings applied.
+
+---
+
+## Install
 
 ```bash
 git clone https://github.com/ExpressoCodes/NixPresso ~/NixPresso
@@ -36,6 +47,26 @@ cd ~/NixPresso && ./install.sh
 - Symlink all `~/.config` entries (Hyprland, Quickshell, qs-dock, Kitty, Rofi, Mako)
 
 Reboot and you're in.
+
+---
+
+## Update
+
+```bash
+cd ~/NixPresso && ./update.sh
+```
+
+`update.sh` will:
+- Pull the latest upstream changes (`git pull --ff-only`)
+- Home config (`~/.config`, `~/.local/share`) is already live — updated automatically via symlinks
+- Re-apply dconf settings from `home/apply-dconf.sh` if present
+- For each NixOS config file in `nixos/`:
+  - **`packages.json`** — 3-way merge: upstream additions/removals are shown, your own packages are always preserved; you're prompted before any upstream package change is applied
+  - **All other files** — substitutes your hostname/username, shows a diff if anything changed, and asks `[U]pdate / [S]kip` before overwriting
+- Re-generates `hardware-acceleration.nix` from your saved GPU variant + live PCI bus IDs
+- Runs `nixos-rebuild switch` only when at least one file was actually changed; skips the rebuild entirely if nothing changed
+
+Your saved settings (hostname, username, GPU variant) are read from `/etc/nixos/.dotfiles-vars` written by `install.sh` — run `install.sh` first if that file is missing.
 
 ---
 

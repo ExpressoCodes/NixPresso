@@ -52,6 +52,12 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("hyprpaper")                              -- wallpaper (~/.config/hypr/hyprpaper.conf)
 end)
 
+-- Re-apply wallpaper when a monitor connects (handles external monitors that
+-- come up after hyprpaper has already processed its config at startup)
+hl.on("monitor.added", function(mon)
+    hl.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/apply-wallpaper.sh " .. mon.name)
+end)
+
 -- hl.on("hyprland.start", function ()
 --   hl.exec_cmd(terminal)
 --   hl.exec_cmd("nm-applet")
@@ -316,3 +322,8 @@ hl.window_rule({
     size   = "monitor_w*0.6 monitor_h*0.7",
     center = true,
 })
+
+-- >>> hyprland-settings: monitors (do not edit this line)
+hl.monitor({ output = "eDP-1", mode = "1920x1200@60.003", position = "247x0", scale = "1" })
+hl.monitor({ output = "DP-3", mode = "2048x1152@59.997", position = "-1801x0", scale = "1" })
+-- <<< hyprland-settings: monitors (do not edit this line)

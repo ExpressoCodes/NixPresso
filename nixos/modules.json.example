@@ -1,18 +1,4 @@
 {
-  "hyprland": {
-    "type": "flake-module",
-    "input": "hyprland",
-    "url": "github:hyprwm/Hyprland",
-    "source": "system",
-    "enabled": true
-  },
-  "hyprland-settings": {
-    "type": "flake-module",
-    "input": "hyprland-settings",
-    "url": "github:ExpressoCodes/hyprland-settings",
-    "source": "system",
-    "enabled": true
-  },
   "uxplay": {
     "type": "flake-module",
     "input": "uxplay",

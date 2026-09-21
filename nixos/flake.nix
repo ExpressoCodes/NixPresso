@@ -55,7 +55,11 @@
       # Build the import list — only include entries whose input exists in `inputs`.
       flakeModuleImports = builtins.map
         (entry: inputs.${entry.input}.nixosModules.default)
-        (builtins.filter (entry: inputs ? ${entry.input}) enabledFlakeModules);
+        (builtins.filter
+          (entry: inputs ? ${entry.input}
+                && inputs.${entry.input} ? nixosModules
+                && inputs.${entry.input}.nixosModules ? default)
+          enabledFlakeModules);
     in
     {
       nixosConfigurations.yourhostname = nixpkgs.lib.nixosSystem { # TODO: match networking.hostName in configuration.nix

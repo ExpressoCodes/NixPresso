@@ -4,6 +4,8 @@
   # ── Inputs ────────────────────────────────────────────────────────────────
   # To add a source: append a new block here and reference it in outputs below.
   # To remove a source: delete its block here and its entry in outputs below.
+  #
+  # nixstore-managed inputs live in nixstore-inputs.nix and are merged in below.
 
   inputs = {
 
@@ -13,19 +15,13 @@
     # hyprland ────────────────────────────────────────────────────────────────
     hyprland.url = "github:hyprwm/Hyprland";
 
-    # hyprland-settings ───────────────────────────────────────────────────────
-    hyprland-settings.url = "github:ExpressoCodes/hyprland-settings";
-
-    # uxplay ──────────────────────────────────────────────────────────────────
-    uxplay.url = "github:ExpressoCodes/uxplay";
-
     # nixstore ────────────────────────────────────────────────────────────────
     nixstore = {
       url = "github:ExpressoCodes/nixstore";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-  };
+  } // (import ./nixstore-inputs.nix);
 
   # ── Outputs ───────────────────────────────────────────────────────────────
 
@@ -33,8 +29,8 @@
     {
       nixpkgs,           # nixpkgs
       hyprland,          # hyprland
-      hyprland-settings, # hyprland-settings
-      uxplay,            # uxplay
+      hyprland-settings, # hyprland-settings (via nixstore-inputs.nix)
+      uxplay,            # uxplay            (via nixstore-inputs.nix)
       ...                # nixstore (accessed via inputs.nixstore in configuration.nix)
     } @ inputs:
     {

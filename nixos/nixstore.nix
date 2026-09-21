@@ -6,6 +6,8 @@
   programs.nixstore = {
     enable = true;
     packagesFile = ./packages.json;
+    modulesFile = ./modules.json;
+    inputsFile = ./nixstore-inputs.nix;
     terminalCommand = "${pkgs.kitty}/bin/kitty --class nixstore --title NixStore";
   };
 }

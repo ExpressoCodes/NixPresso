@@ -1,0 +1,37 @@
+{
+  "hyprland": {
+    "type": "flake-module",
+    "input": "hyprland",
+    "url": "github:hyprwm/Hyprland",
+    "source": "system",
+    "enabled": true
+  },
+  "hyprland-settings": {
+    "type": "flake-module",
+    "input": "hyprland-settings",
+    "url": "github:ExpressoCodes/hyprland-settings",
+    "source": "system",
+    "enabled": true
+  },
+  "uxplay": {
+    "type": "flake-module",
+    "input": "uxplay",
+    "url": "github:ExpressoCodes/uxplay",
+    "source": "system",
+    "enabled": true
+  },
+  "localsend": {
+    "type": "program-option",
+    "option": "programs.localsend.enable",
+    "extras": { "openFirewall": true },
+    "source": "system",
+    "enabled": true
+  },
+  "nixstore": {
+    "type": "flake-module",
+    "input": "nixstore",
+    "url": "github:ExpressoCodes/nixstore",
+    "source": "system",
+    "enabled": true
+  }
+}

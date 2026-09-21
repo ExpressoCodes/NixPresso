@@ -13,7 +13,6 @@ home/.config/rofi/*.bak
 
 # NixStore — machine-local managed files (committed examples are tracked separately)
 nixos/modules.json
-nixos/nixstore-inputs.nix
 
 # OS / editor noise
 .DS_Store

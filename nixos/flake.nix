@@ -39,13 +39,31 @@
       uxplay,            # uxplay
       ...                # nixstore (accessed via inputs.nixstore in configuration.nix)
     } @ inputs:
+    let
+      # Read modules.json to get enabled flake modules.
+      # Use builtins.pathExists so it degrades gracefully if the file doesn't exist yet.
+      modulesFile = ./modules.json;
+      modulesData = if builtins.pathExists modulesFile
+        then builtins.fromJSON (builtins.readFile modulesFile)
+        else {};
+
+      # Filter to only enabled flake-module entries.
+      enabledFlakeModules = builtins.filter
+        (entry: entry.type == "flake-module" && entry.enabled == true)
+        (builtins.attrValues modulesData);
+
+      # Build the import list — only include entries whose input exists in `inputs`.
+      flakeModuleImports = builtins.map
+        (entry: inputs.${entry.input}.nixosModules.default)
+        (builtins.filter (entry: inputs ? ${entry.input}) enabledFlakeModules);
+    in
     {
       nixosConfigurations.yourhostname = nixpkgs.lib.nixosSystem { # TODO: match networking.hostName in configuration.nix
         specialArgs = { inherit inputs; };
         system = "x86_64-linux";
         modules = [
           (import ./configuration.nix)
-        ];
+        ] ++ flakeModuleImports;
       };
     };
 }

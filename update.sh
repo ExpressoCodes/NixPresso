@@ -409,6 +409,7 @@ _sync_home_files "$DOTFILES/home/.config"      "$HOME/.config"
 _sync_home_files "$DOTFILES/home/.local/share" "$HOME/.local/share"
 _sync_home_files "$DOTFILES/home/.local/bin"   "$HOME/.local/bin"
 [ -d "$HOME/.local/bin" ] && chmod +x "$HOME/.local/bin"/* 2>/dev/null || true
+[ -d "$HOME/.config/hypr/scripts" ] && chmod +x "$HOME/.config/hypr/scripts"/*.sh 2>/dev/null || true
 echo ""
 
 # ── dconf settings ────────────────────────────────────────────────────────────

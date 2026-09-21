@@ -47,6 +47,8 @@
         then builtins.fromJSON (builtins.readFile modulesFile)
         else {};
 
+      lib = nixpkgs.lib;
+
       # Filter to only enabled flake-module entries.
       enabledFlakeModules = builtins.filter
         (entry: entry.type == "flake-module" && entry.enabled == true)
@@ -60,6 +62,25 @@
                 && inputs.${entry.input} ? nixosModules
                 && inputs.${entry.input}.nixosModules ? default)
           enabledFlakeModules);
+
+      # Build a plain NixOS module for program-option entries (e.g. programs.localsend.enable).
+      # Doing this here (plain Nix) avoids referencing `config` inside the module system,
+      # which would cause infinite recursion.
+      programOptionEntries = builtins.filter
+        (entry: (entry.type or "") == "program-option" && entry.enabled or false)
+        (builtins.attrValues modulesData);
+
+      programOptionModule = builtins.foldl'
+        (acc: entry:
+          let
+            optPath = lib.splitString "." entry.option;
+            parentPath = lib.init optPath;
+            baseAttrs = lib.setAttrByPath optPath true;
+            extrasAttrs = lib.optionalAttrs (entry ? extras) (lib.setAttrByPath parentPath entry.extras);
+          in
+          lib.recursiveUpdate acc (lib.recursiveUpdate baseAttrs extrasAttrs))
+        {}
+        programOptionEntries;
     in
     {
       nixosConfigurations.yourhostname = nixpkgs.lib.nixosSystem { # TODO: match networking.hostName in configuration.nix
@@ -67,6 +88,7 @@
         system = "x86_64-linux";
         modules = [
           (import ./configuration.nix)
+          programOptionModule
         ] ++ flakeModuleImports;
       };
     };

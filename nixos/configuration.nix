@@ -15,9 +15,7 @@
       ./hardware-configuration.nix
       ./dotfiles-updater.nix
       ./hyprland.nix
-      ./localsend.nix
       ./nixstore.nix
-      ./uxplay.nix
     ];
 
   nix.settings = {

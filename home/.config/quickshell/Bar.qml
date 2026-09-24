@@ -52,6 +52,7 @@ PanelWindow {
         Tray { bar: bar; anchors.verticalCenter: parent.verticalCenter }
         BluetoothButton { anchors.verticalCenter: parent.verticalCenter }
         Network { anchors.verticalCenter: parent.verticalCenter }
+        PowerProfiles { anchors.verticalCenter: parent.verticalCenter }
         SessionButton { anchors.verticalCenter: parent.verticalCenter }
     }
 }

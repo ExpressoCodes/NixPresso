@@ -31,9 +31,7 @@ hl.bind(mainMod .. " + down",  hl.dsp.focus({ direction = "down" }))
 for i = 1, 10 do
     local key = i % 10 -- 10 maps to key 0
     hl.bind(mainMod .. " + " .. key,             hl.dsp.focus({ workspace = i}))
-    if key ~= 4 then -- SUPER+SHIFT+4 is handled with the screenshot binds below
-        hl.bind(mainMod .. " + SHIFT + " .. key, hl.dsp.window.move({ workspace = i }))
-    end
+    hl.bind(mainMod .. " + SHIFT + " .. key, hl.dsp.window.move({ workspace = i }))
 end
 
 -- Example special workspace (scratchpad)
@@ -64,25 +62,6 @@ hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = tr
 
 -- Screenshot: left-click window = window, drag = area, right-click = monitor, Esc = cancel
 hl.bind("Print", hl.dsp.exec_cmd("~/.config/hypr/scripts/screenshot.sh"))
--- The NuPhy Air75 V2 (Mac mode) key between F12 and Insert sends SUPER+SHIFT+4.
--- The keyboard fires Super -> 4 within ~0-22ms, a human takes far longer, so a
--- near-instant combo is a screenshot and a normal one moves to workspace 4.
-local superDownMs, macroCombo = -1000, false
-hl.on("input.keyboard.key", function(keycode, timeMs, state) -- runs before binds
-    if state ~= 1 then return end
-    if keycode == 133 or keycode == 134 then -- Super_L / Super_R
-        superDownMs = timeMs
-    elseif keycode == 13 then -- 4
-        macroCombo = timeMs - superDownMs < 40
-    end
-end)
-hl.bind(mainMod .. " + SHIFT + 4", function()
-    if macroCombo then
-        hl.dispatch(hl.dsp.exec_cmd("~/.config/hypr/scripts/screenshot.sh"))
-    else
-        hl.dispatch(hl.dsp.window.move({ workspace = 4 }))
-    end
-end)
 -- Only enabled by screenshot.sh while its overlay is open (slurp can't tell buttons apart)
 screenshotRightClick = hl.bind("mouse:273", hl.dsp.exec_cmd("~/.config/hypr/scripts/screenshot.sh --right-click"))
 screenshotRightClick:set_enabled(false)

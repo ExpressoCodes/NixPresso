@@ -390,18 +390,21 @@ if [ "$(whoami)" != "$USERNAME" ]; then
     done
     sudo chown -R "$USERNAME:users" "$CONFIG"
 
-    bold "→ Linking ~/.local/share entries for $USERNAME ..."
+    bold "→ Copying ~/.local/share entries for $USERNAME ..."
     for src in "$DOTFILES/home/.local/share"/*/; do
         [ -d "$src" ] || continue
-        rel="${src#$DOTFILES/home/}"   # e.g. .local/share/rofi
+        rel="${src#$DOTFILES/home/}"
+        rel="${rel%/}"
         dst="$TARGET_HOME/$rel"
         sudo mkdir -p "$(dirname "$dst")"
-        if sudo test -e "$dst" && ! sudo test -L "$dst"; then
+        if sudo test -L "$dst"; then
+            sudo rm "$dst"
+        elif sudo test -d "$dst"; then
             info "backing up existing: $dst → $dst.bak"
             sudo mv "$dst" "$dst.bak"
         fi
-        sudo ln -sfn "$src" "$dst"
-        info "linked: $dst"
+        sudo cp -rT "$src" "$dst"
+        info "copied: $dst"
     done
     sudo chown -R "$USERNAME:users" "$TARGET_HOME/.local"
 
@@ -438,18 +441,21 @@ else
         info "linked: $dst"
     done
 
-    bold "→ Linking ~/.local/share entries ..."
+    bold "→ Copying ~/.local/share entries ..."
     for src in "$DOTFILES/home/.local/share"/*/; do
         [ -d "$src" ] || continue
-        rel="${src#$DOTFILES/home/}"   # e.g. .local/share/rofi
+        rel="${src#$DOTFILES/home/}"
+        rel="${rel%/}"
         dst="$TARGET_HOME/$rel"
         mkdir -p "$(dirname "$dst")"
-        if [ -e "$dst" ] && [ ! -L "$dst" ]; then
+        if [ -L "$dst" ]; then
+            rm "$dst"
+        elif [ -d "$dst" ]; then
             info "backing up existing: $dst → $dst.bak"
             mv "$dst" "$dst.bak"
         fi
-        ln -sfn "$src" "$dst"
-        info "linked: $dst"
+        cp -rT "$src" "$dst"
+        info "copied: $dst"
     done
 
     bold "→ Linking ~/.local/bin entries ..."

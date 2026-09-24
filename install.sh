@@ -424,7 +424,26 @@ EOF
     bold "→ Setting hostname temporarily to '$HOSTNAME' ..."
     sudo hostname "$HOSTNAME"
 
-    bold "→ Running nixos-rebuild switch ..."
+    # ── Two-phase build: seed Hyprland cache before building Hyprland ────────
+    # Phase 1 configures the nix daemon with the Hyprland substituter without
+    # building Hyprland itself.  Phase 2 can then pull from cache instead of
+    # compiling from source.
+    bold "→ Phase 1: bootstrap build (registers Hyprland cache, no Hyprland yet) ..."
+    sudo tee /etc/nixos/cachix-bootstrap.nix > /dev/null <<'CACHIX_EOF'
+{ ... }:
+{
+  nix.settings = {
+    substituters        = [ "https://hyprland.cachix.org" ];
+    trusted-public-keys = [ "hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIBMioiJM7ypFP8PwtkuGc=" ];
+  };
+}
+CACHIX_EOF
+    sudo sed -i 's|./hyprland.nix|./cachix-bootstrap.nix|' /etc/nixos/configuration.nix
+    sudo nixos-rebuild switch --flake "/etc/nixos#$HOSTNAME"
+
+    bold "→ Phase 2: full build with Hyprland (pulling from cache) ..."
+    sudo sed -i 's|./cachix-bootstrap.nix|./hyprland.nix|' /etc/nixos/configuration.nix
+    sudo rm /etc/nixos/cachix-bootstrap.nix
     sudo nixos-rebuild switch --flake "/etc/nixos#$HOSTNAME"
 else
     info "/etc/nixos not found — skipping NixOS system config."

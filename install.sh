@@ -123,9 +123,27 @@ detect_gpu() {
     elif $has_amd  && $has_nvidia; then echo "amd-nvidia"
     elif $has_nvidia;              then echo "nvidia"
     elif $has_amd;                 then echo "amd"
-    elif $has_intel;               then echo "intel"
+    elif $has_intel; then
+        [ "$(detect_intel_gpu_gen)" = "legacy" ] && echo "intel-legacy" || echo "intel"
     else                                echo "unknown"
     fi
+}
+
+detect_intel_gpu_gen() {
+    # Returns "legacy" for Intel Gen 8 (Broadwell / 5th-gen Core) and older,
+    # "modern" for Gen 9 (Skylake / 6th-gen Core) and newer.
+    # Reads the two-byte hex prefix of the Intel iGPU PCI device ID:
+    #   0x16xx = Broadwell (Gen 8) — iris has broken Wayland EGL on this hardware
+    #   0x19xx and above = Skylake+ — iris works correctly
+    local dev_id
+    dev_id=$(lspci -n 2>/dev/null \
+        | awk '/8086:/ && (/ 0300 | 0302 | 0380 /)' \
+        | grep -oE '8086:[0-9a-fA-F]+' | cut -d: -f2 | head -1)
+    [ -z "$dev_id" ] && { echo "modern"; return; }
+    local hi
+    hi=$(printf '%d' "0x${dev_id:0:2}" 2>/dev/null) || { echo "modern"; return; }
+    # Skylake starts at prefix 0x19 (decimal 25); anything below is Gen 8 or older
+    [ "$hi" -lt 25 ] && echo "legacy" || echo "modern"
 }
 
 pci_to_nix() {
@@ -143,23 +161,24 @@ select_gpu() {
     bold "GPU configuration"
     info "Detected: $detected"
     echo ""
-    echo "  1) intel          (Intel iGPU only)"
-    echo "  2) amd            (AMD iGPU/dGPU only)"
-    echo "  3) nvidia         (NVIDIA only)"
-    echo "  4) intel-nvidia   (Intel iGPU + NVIDIA dGPU, PRIME offload)"
-    echo "  5) amd-nvidia     (AMD iGPU + NVIDIA dGPU, PRIME offload)"
+    echo "  1) intel          (Intel iGPU, Gen 9 / Skylake and newer)"
+    echo "  2) intel-legacy   (Intel iGPU, Gen 8 / Broadwell and older — uses crocus driver)"
+    echo "  3) amd            (AMD iGPU/dGPU only)"
+    echo "  4) nvidia         (NVIDIA only)"
+    echo "  5) intel-nvidia   (Intel iGPU + NVIDIA dGPU, PRIME offload)"
+    echo "  6) amd-nvidia     (AMD iGPU + NVIDIA dGPU, PRIME offload)"
     echo ""
-    local map=( "" intel amd nvidia intel-nvidia amd-nvidia )
+    local map=( "" intel intel-legacy amd nvidia intel-nvidia amd-nvidia )
     local default_idx=1
-    for i in 1 2 3 4 5; do
+    for i in 1 2 3 4 5 6; do
         [ "${map[$i]}" = "$detected" ] && default_idx=$i
     done
     local choice
     while true; do
         read -rp "$(bold "Choice") [$default_idx]: " choice
         choice="${choice:-$default_idx}"
-        [[ "$choice" =~ ^[1-5]$ ]] && break
-        info "Invalid choice '$choice' — enter a number 1–5."
+        [[ "$choice" =~ ^[1-6]$ ]] && break
+        info "Invalid choice '$choice' — enter a number 1–6."
     done
     GPU_VARIANT="${map[$choice]}"
 }
@@ -192,6 +211,55 @@ write_gpu_nix() {
             sudo cp "$src" "$dest"
             ;;
     esac
+}
+
+patch_for_legacy_intel() {
+    # Materialise a symlink (to file or dir) into a real local copy so we can
+    # patch it without touching the dotfiles repo.
+    _materialise() {
+        local dst="$1" use_sudo="${2:-false}"
+        local _sudo=""; $use_sudo && _sudo="sudo"
+        if $_sudo test -L "$dst"; then
+            local src; src=$(readlink -f "$dst")
+            $_sudo rm "$dst"
+            if $_sudo test -d "$src"; then
+                $_sudo cp -rT "$src" "$dst"
+            else
+                $_sudo cp "$src" "$dst"
+            fi
+        fi
+    }
+
+    local config_dir="$1"   # e.g. /home/tommy/.config
+    local bin_dir="$2"      # e.g. /home/tommy/.local/bin
+    local use_sudo="${3:-false}"
+    local _sudo=""; $use_sudo && _sudo="sudo"
+
+    # ── Hyprland configs ──────────────────────────────────────────────────
+    local hypr="$config_dir/hypr"
+    _materialise "$hypr" "$use_sudo"
+
+    # keybinds.lua: launch kitty via crocus
+    $_sudo sed -i \
+        's|local terminal    = "kitty"|local terminal    = "env MESA_LOADER_DRIVER_OVERRIDE=crocus kitty"|' \
+        "$hypr/keybinds.lua"
+
+    # hyprland.lua: launch Quickshell bar and dock via crocus
+    $_sudo sed -i \
+        's|hl\.exec_cmd("qs")|hl.exec_cmd("env MESA_LOADER_DRIVER_OVERRIDE=crocus qs")|' \
+        "$hypr/hyprland.lua"
+    $_sudo sed -i \
+        's|hl\.exec_cmd("quickshell -p "|hl.exec_cmd("env MESA_LOADER_DRIVER_OVERRIDE=crocus quickshell -p "|' \
+        "$hypr/hyprland.lua"
+
+    # ── qs-restart helper ─────────────────────────────────────────────────
+    local qs_restart="$bin_dir/qs-restart"
+    _materialise "$qs_restart" "$use_sudo"
+    $_sudo sed -i \
+        's|^quickshell |env MESA_LOADER_DRIVER_OVERRIDE=crocus quickshell |' \
+        "$qs_restart"
+
+    info "Applied legacy-Intel crocus patches to Hyprland + Quickshell configs"
 }
 
 detect_boot_mode() {
@@ -426,6 +494,10 @@ if [ "$(whoami)" != "$USERNAME" ]; then
         done
         sudo chown -R "$USERNAME:users" "$dst_bin"
     fi
+    if [ "$GPU_VARIANT" = "intel-legacy" ]; then
+        patch_for_legacy_intel "$CONFIG" "$TARGET_HOME/.local/bin" true
+        sudo chown -R "$USERNAME:users" "$CONFIG/hypr" "$TARGET_HOME/.local/bin/qs-restart" 2>/dev/null || true
+    fi
 else
     # Running as the target user — home already exists, no sudo needed,
     # no ownership changes required.
@@ -475,21 +547,24 @@ else
             info "linked: $dst"
         done
     fi
+    if [ "$GPU_VARIANT" = "intel-legacy" ]; then
+        patch_for_legacy_intel "$CONFIG" "$TARGET_HOME/.local/bin" false
+    fi
 fi
 
 # ── dconf settings ────────────────────────────────────────────────────────────
 if command -v dconf &>/dev/null; then
     bold "→ Applying dconf settings ..."
-    cp "$DOTFILES/home/apply-dconf.sh" "$TARGET_HOME/apply-dconf.sh"
-    chmod +x "$TARGET_HOME/apply-dconf.sh"
     if [ "$(whoami)" != "$USERNAME" ]; then
         sudo -u "$USERNAME" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u "$USERNAME")/bus" \
-            bash "$TARGET_HOME/apply-dconf.sh" || info "dconf: session bus not available, run ~/apply-dconf.sh after login"
+            bash "$DOTFILES/home/apply-dconf.sh" \
+            || info "dconf: session bus not available — run '$DOTFILES/home/apply-dconf.sh' after login"
     else
-        bash "$TARGET_HOME/apply-dconf.sh" || info "dconf: failed, run ~/apply-dconf.sh after login"
+        bash "$DOTFILES/home/apply-dconf.sh" \
+            || info "dconf: failed — run '$DOTFILES/home/apply-dconf.sh' after login"
     fi
 else
-    info "dconf not found — skipping (run ~/apply-dconf.sh after first login if needed)"
+    info "dconf not found — skipping (run '$DOTFILES/home/apply-dconf.sh' after first login if needed)"
 fi
 
 if command -v hyprctl &>/dev/null && hyprctl monitors &>/dev/null 2>&1; then

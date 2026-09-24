@@ -4,6 +4,8 @@
   nixpkgs.config.packageOverrides = pkgs: {
     vaapiIntel = pkgs.vaapiIntel.override { enableHybridCodec = true; };
   };
+  services.power-profiles-daemon.enable = true;
+
   hardware.graphics = {
     enable = true;
     enable32Bit = true;

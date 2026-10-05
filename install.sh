@@ -3,6 +3,10 @@ set -euo pipefail
 
 DOTFILES="$(cd "$(dirname "$0")" && pwd)"
 
+# Shared home-config deployment engine (SEED mode here, MERGE mode in update.sh).
+# shellcheck source=lib/home-sync.sh
+. "$DOTFILES/lib/home-sync.sh"
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 bold()  { printf '\033[1m%s\033[0m\n' "$*"; }
 info()  { printf '  %s\n' "$*"; }
@@ -449,123 +453,48 @@ else
     info "/etc/nixos not found — skipping NixOS system config."
 fi
 
-# ── User config (~/.config) ───────────────────────────────────────────────────
-bold "→ Linking ~/.config entries for $USERNAME ..."
+# ── User config (~/.config, ~/.local) ─────────────────────────────────────────
+# SEED mode: deploy by COPY (never symlink) via the shared engine, so the clone
+# is disposable. track/track-conservative get a baseline seeded := shipped-new,
+# seed-once is copied only if absent, generated is placed as a placeholder then
+# regenerated below, scripts/bin get the executable bit.
+bold "→ Seeding ~/.config and ~/.local for $USERNAME (copy, not symlink) ..."
 TARGET_HOME="/home/$USERNAME"
 CONFIG="$TARGET_HOME/.config"
 
+# Point the engine at the target home (works for self- and other-user installs).
+HS_HOME="$TARGET_HOME"
+HS_STATE_DIR="$TARGET_HOME/.local/share/dotfiles-home-state"
+HS_STATE_ROOT="$TARGET_HOME/.local/state/nixpresso"
+HS_CONFLICT_ROOT="$HS_STATE_ROOT/conflicts"
+HS_HEAL_DIR="$HS_STATE_ROOT/heal"
+HS_CONFIG_ROOT="$CONFIG"
+HS_LOCALSHARE_ROOT="$TARGET_HOME/.local/share"
+HS_LOCALBIN_ROOT="$TARGET_HOME/.local/bin"
+
 if [ "$(whoami)" != "$USERNAME" ]; then
-    # Running as a different user (e.g. root or an installer account).
-    # Use sudo throughout and fix ownership at the end.
-    # Also pre-create the home dir: nixos-rebuild creates the account but the
-    # home dir is only made on first login.
+    # Running as a different user (e.g. root/installer): use sudo for writes and
+    # fix ownership at the end. nixos-rebuild made the account but the home dir
+    # is only created on first login, so pre-create it.
+    HS_SUDO="sudo"
     if [ ! -d "$TARGET_HOME" ]; then
         sudo mkdir -p "$TARGET_HOME"
         sudo chown "$USERNAME:users" "$TARGET_HOME"
         info "created $TARGET_HOME"
     fi
-    sudo mkdir -p "$CONFIG"
-    for src in "$DOTFILES/home/.config"/*/; do
-        name="$(basename "$src")"
-        dst="$CONFIG/$name"
-        if sudo test -e "$dst" && ! sudo test -L "$dst"; then
-            info "backing up existing: $dst → $dst.bak"
-            sudo mv "$dst" "$dst.bak"
-        fi
-        sudo ln -sfn "$src" "$dst"
-        info "linked: $dst"
-    done
-    sudo chown -R "$USERNAME:users" "$CONFIG"
-
-    bold "→ Copying ~/.local/share entries for $USERNAME ..."
-    for src in "$DOTFILES/home/.local/share"/*/; do
-        [ -d "$src" ] || continue
-        rel="${src#$DOTFILES/home/}"
-        rel="${rel%/}"
-        dst="$TARGET_HOME/$rel"
-        sudo mkdir -p "$(dirname "$dst")"
-        if sudo test -L "$dst"; then
-            sudo rm "$dst"
-        elif sudo test -d "$dst"; then
-            info "backing up existing: $dst → $dst.bak"
-            sudo mv "$dst" "$dst.bak"
-        fi
-        sudo cp -rT "$src" "$dst"
-        info "copied: $dst"
-    done
-    sudo chown -R "$USERNAME:users" "$TARGET_HOME/.local"
-
-    bold "→ Linking ~/.local/bin entries for $USERNAME ..."
-    local_bin_src="$DOTFILES/home/.local/bin"
-    if [ -d "$local_bin_src" ]; then
-        dst_bin="$TARGET_HOME/.local/bin"
-        sudo mkdir -p "$dst_bin"
-        for src in "$local_bin_src"/*; do
-            [ -e "$src" ] || continue
-            name="$(basename "$src")"
-            dst="$dst_bin/$name"
-            if sudo test -e "$dst" && ! sudo test -L "$dst"; then
-                sudo mv "$dst" "$dst.bak"
-            fi
-            sudo ln -sfn "$src" "$dst"
-            sudo chmod +x "$dst"
-            info "linked: $dst"
-        done
-        sudo chown -R "$USERNAME:users" "$dst_bin"
-    fi
+    hs_seed_tree "$DOTFILES/home/.config"      "$CONFIG"
+    hs_seed_tree "$DOTFILES/home/.local/share" "$TARGET_HOME/.local/share"
+    hs_seed_tree "$DOTFILES/home/.local/bin"   "$TARGET_HOME/.local/bin"
     if [ "$GPU_VARIANT" = "intel-legacy" ]; then
         patch_for_legacy_intel "$CONFIG" "$TARGET_HOME/.local/bin" true
-        sudo chown -R "$USERNAME:users" "$CONFIG/hypr" "$TARGET_HOME/.local/bin/qs-restart" 2>/dev/null || true
     fi
+    sudo chown -R "$USERNAME:users" "$CONFIG" "$TARGET_HOME/.local"
+    HS_SUDO=""
 else
-    # Running as the target user — home already exists, no sudo needed,
-    # no ownership changes required.
-    mkdir -p "$CONFIG"
-    for src in "$DOTFILES/home/.config"/*/; do
-        name="$(basename "$src")"
-        dst="$CONFIG/$name"
-        if [ -e "$dst" ] && [ ! -L "$dst" ]; then
-            info "backing up existing: $dst → $dst.bak"
-            mv "$dst" "$dst.bak"
-        fi
-        ln -sfn "$src" "$dst"
-        info "linked: $dst"
-    done
-
-    bold "→ Copying ~/.local/share entries ..."
-    for src in "$DOTFILES/home/.local/share"/*/; do
-        [ -d "$src" ] || continue
-        rel="${src#$DOTFILES/home/}"
-        rel="${rel%/}"
-        dst="$TARGET_HOME/$rel"
-        mkdir -p "$(dirname "$dst")"
-        if [ -L "$dst" ]; then
-            rm "$dst"
-        elif [ -d "$dst" ]; then
-            info "backing up existing: $dst → $dst.bak"
-            mv "$dst" "$dst.bak"
-        fi
-        cp -rT "$src" "$dst"
-        info "copied: $dst"
-    done
-
-    bold "→ Linking ~/.local/bin entries ..."
-    local_bin_src="$DOTFILES/home/.local/bin"
-    if [ -d "$local_bin_src" ]; then
-        dst_bin="$TARGET_HOME/.local/bin"
-        mkdir -p "$dst_bin"
-        for src in "$local_bin_src"/*; do
-            [ -e "$src" ] || continue
-            name="$(basename "$src")"
-            dst="$dst_bin/$name"
-            if [ -e "$dst" ] && [ ! -L "$dst" ]; then
-                mv "$dst" "$dst.bak"
-            fi
-            ln -sfn "$src" "$dst"
-            chmod +x "$dst"
-            info "linked: $dst"
-        done
-    fi
+    # Running as the target user — no sudo, no ownership changes required.
+    hs_seed_tree "$DOTFILES/home/.config"      "$CONFIG"
+    hs_seed_tree "$DOTFILES/home/.local/share" "$TARGET_HOME/.local/share"
+    hs_seed_tree "$DOTFILES/home/.local/bin"   "$TARGET_HOME/.local/bin"
     if [ "$GPU_VARIANT" = "intel-legacy" ]; then
         patch_for_legacy_intel "$CONFIG" "$TARGET_HOME/.local/bin" false
     fi

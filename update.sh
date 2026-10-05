@@ -181,6 +181,42 @@ pci_to_nix() {
     printf "PCI:%d:%d:0" "$((16#$bus))" "$((16#$slot))"
 }
 
+# Shared home-config deployment engine (MERGE mode).
+# shellcheck source=lib/home-sync.sh
+. "$DOTFILES/lib/home-sync.sh"
+
+# ── Dry-run (--check): ZERO writes — no heal, cp, baseline, journal, quiesce,
+# kill, git mutation. Just report what a real run WOULD do, then exit. ─────────
+if [[ "${1:-}" == "--check" ]]; then
+    bold "→ Dry-run (--check): reporting planned actions, no writes ..."
+    echo "" >&2
+    hs_check
+    echo "" >&2
+    bold "→ (--check) done — nothing was modified."
+    exit 0
+fi
+
+# ── Real-run safety net (NOT armed in --check, which exits above) ─────────────
+# Under `set -euo pipefail` an unexpected failure between hs_quiesce_writers and
+# hs_resume_writers would abort the script with quickshell left DOWN and no
+# reload — a dead desktop shell. This trap ALWAYS brings writers back (and does
+# the final hyprctl reload, via hs_resume_writers) on any exit — success, error,
+# or interrupt — if quiesce ran but resume didn't. It is idempotent (guarded by
+# _hs_quiesced, which hs_resume_writers clears) and preserves the original exit
+# code. It also folds in the sudo-keepalive cleanup installed later.
+_hs_quiesced=0
+_hs_cleanup() {
+    local ec=$?
+    trap - EXIT INT TERM           # disarm to avoid re-entry from our own exit
+    if [ "${_hs_quiesced:-0}" = "1" ]; then
+        _hs_warn "update exited with writers quiesced — restoring them ..."
+        hs_resume_writers || true  # includes the final hyprctl reload
+    fi
+    [ -n "${SUDO_KEEPALIVE_PID:-}" ] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+    exit "$ec"                     # never mask the original exit code
+}
+trap _hs_cleanup EXIT INT TERM
+
 # ── Pull latest ───────────────────────────────────────────────────────────────
 if [[ "${1:-}" != "--no-pull" ]] && [[ "${NIXSTORE_NO_PULL:-0}" != "1" ]]; then
     bold "→ Pulling latest changes ..."
@@ -188,228 +224,35 @@ if [[ "${1:-}" != "--no-pull" ]] && [[ "${NIXSTORE_NO_PULL:-0}" != "1" ]]; then
     echo ""
 fi
 
-# ── ~/.config + ~/.local/share (copied from dotfiles/home/) ──────────────────
-bold "→ Syncing home config (~/.config, ~/.local/share) ..."
+# ── ~/.config + ~/.local (deployed by COPY via the shared engine) ────────────
+# Real-run order (council-reviewed):
+#   quiesce writers → self-heal (symlinked clone → real copies) → 3-way MERGE
+#   → regenerate generated files → resume writers → hyprctl reload (last).
+bold "→ Syncing home config (~/.config, ~/.local) ..."
 
-_is_text_file() {
-    grep -qI '' "$1" 2>/dev/null
-}
+hs_quiesce_writers
 
-_backup_file() {
-    local file="$1"
-    local stamp
-    stamp=$(date +%Y%m%d-%H%M%S)
-    cp "$file" "${file}.bak.${stamp}"
-    echo "${file}.bak.${stamp}"
-}
+bold "→ Self-healing any symlinked install into real copies ..."
+hs_selfheal
 
-_sync_home_file_interactive() {
-    local src="$1" dst="$2" baseline="$3"
+bold "→ Merging upstream home config (3-way) ..."
+hs_sync_tree "$DOTFILES/home/.config"      "$HOME/.config"      644
+hs_sync_tree "$DOTFILES/home/.local/share" "$HOME/.local/share" 644
+hs_sync_tree "$DOTFILES/home/.local/bin"   "$HOME/.local/bin"   755
+hs_delete_pass
 
-    echo ""
-    bold "  ~/${dst#"$HOME"/} has upstream changes:"
-    diff "$dst" "$src" | sed 's/^/    /' || true
-    echo ""
-
-    if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
-        cp "$src" "$dst"
-        cp "$src" "$baseline"
-        ok "updated: ~/${dst#"$HOME"/}"
-        return
+# Generated files are owned by their generator — regenerate now (writers still
+# quiesced; init-monitors.sh does its own atomic write + hash guard).
+if command -v hyprctl &>/dev/null && hyprctl monitors &>/dev/null 2>&1; then
+    _init_monitors="$HOME/.config/hypr/scripts/init-monitors.sh"
+    if [ -f "$_init_monitors" ]; then
+        bold "→ Regenerating monitors.lua ..."
+        bash "$_init_monitors" && ok "monitors.lua updated" || info "init-monitors.sh failed — skipping"
     fi
+fi
 
-    read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans </dev/tty
-    ans="${ans:-u}"
-    if [[ "$ans" =~ ^[Uu] ]]; then
-        cp "$src" "$dst"
-        cp "$src" "$baseline"
-        ok "updated: ~/${dst#"$HOME"/}"
-    else
-        skip "kept local: ~/${dst#"$HOME"/}"
-    fi
-}
-
-_sync_one_home_file() {
-    local src="$1"
-    local src_base="$2"
-    local dst_base="$3"
-
-    local rel dst baseline
-    rel="${src#"$src_base"/}"
-    dst="$dst_base/$rel"
-    baseline="$HOME_STATE_DIR/${dst_base##"$HOME"/}/$rel"
-
-    # Skip any stray .bak.* files in src (defensive)
-    [[ "$src" =~ \.bak\.[0-9]{8}-[0-9]{6}$ ]] && return
-
-    mkdir -p "$(dirname "$dst")"
-    mkdir -p "$(dirname "$baseline")"
-
-    # Case 1: destination does not exist yet
-    if [ ! -f "$dst" ]; then
-        cp "$src" "$dst"
-        cp "$src" "$baseline"
-        ok "new: ~/${dst#"$HOME"/}"
-        return
-    fi
-
-    # Case 2: destination already matches new source
-    if cmp -s "$src" "$dst"; then
-        [ -f "$baseline" ] || cp "$src" "$baseline"
-        skip "unchanged: ~/${dst#"$HOME"/}"
-        return
-    fi
-
-    # Scripts: never merge, just back up + overwrite
-    if [[ "$src" == *.sh ]]; then
-        local bak
-        bak=$(_backup_file "$dst")
-        cp "$src" "$dst"
-        cp "$src" "$baseline"
-        ok "updated (script, backup: $(basename "$bak")): ~/${dst#"$HOME"/}"
-        return
-    fi
-
-    # No baseline: first-run — show diff and ask (mirrors NixOS behaviour)
-    if [ ! -f "$baseline" ]; then
-        if ! _is_text_file "$src"; then
-            # Binary, no baseline — apply silently
-            cp "$src" "$dst"
-            cp "$src" "$baseline"
-            ok "updated (binary): ~/${dst#"$HOME"/}"
-            return
-        fi
-        echo ""
-        bold "  ~/${dst#"$HOME"/} differs from dotfiles:"
-        diff "$dst" "$src" | sed 's/^/    /' || true
-        echo ""
-        if [[ "${NIXSTORE_NONINTERACTIVE:-0}" = "1" ]]; then
-            cp "$src" "$dst"
-            cp "$src" "$baseline"
-            ok "updated: ~/${dst#"$HOME"/}"
-            return
-        fi
-        read -rp "  $(bold "[U]pdate / [S]kip") [u]: " ans </dev/tty
-        ans="${ans:-u}"
-        if [[ "$ans" =~ ^[Uu] ]]; then
-            cp "$src" "$dst"
-            cp "$src" "$baseline"
-            ok "updated: ~/${dst#"$HOME"/}"
-        else
-            cp "$src" "$baseline"
-            skip "kept local (baseline recorded): ~/${dst#"$HOME"/}"
-        fi
-        return
-    fi
-
-    # Baseline matches new source: upstream unchanged, user may have diverged
-    if cmp -s "$src" "$baseline"; then
-        skip "unchanged upstream (user-modified): ~/${dst#"$HOME"/}"
-        return
-    fi
-
-    # Binary files: back up + overwrite (can't merge)
-    if ! _is_text_file "$src"; then
-        local bak
-        bak=$(_backup_file "$dst")
-        cp "$src" "$dst"
-        cp "$src" "$baseline"
-        ok "updated (binary, backup: $(basename "$bak")): ~/${dst#"$HOME"/}"
-        return
-    fi
-
-    # JSON files: use jq 3-way merge (like merge_packages)
-    if [[ "$src" == *.json ]] && command -v jq &>/dev/null; then
-        local merged
-        merged=$(jq -n \
-            --argjson base     "$(cat "$baseline")" \
-            --argjson upstream "$(cat "$src")" \
-            --argjson current  "$(cat "$dst")" \
-            '
-              ($upstream | to_entries) as $up_entries |
-              ($base | to_entries) as $base_entries |
-              ($current | to_entries) as $cur_entries |
-              # Keys removed upstream
-              ($base_entries | map(.key) | map(select(. as $k | ($up_entries | map(.key) | contains([$k]) | not)))) as $removed_keys |
-              # Start with current, apply upstream additions/changes, remove upstream deletions
-              reduce $up_entries[] as $e (
-                $current;
-                if ($base | has($e.key)) and (($base[$e.key]) == ($current[$e.key]))
-                then . + {($e.key): $e.value}  # user did not change, take upstream
-                else .  # user changed this key, keep user value
-                end
-              ) |
-              del(.[$removed_keys[]])
-            ' 2>/dev/null) || merged=""
-
-        if [ -n "$merged" ] && echo "$merged" | jq . &>/dev/null; then
-            if [ "$merged" = "$(cat "$dst")" ]; then
-                cp "$src" "$baseline"
-                skip "unchanged (json merge identical): ~/${dst#"$HOME"/}"
-            else
-                printf '%s\n' "$merged" > "$dst"
-                cp "$src" "$baseline"
-                ok "merged (json): ~/${dst#"$HOME"/}"
-            fi
-            return
-        fi
-        # jq merge failed — fall through to diff3
-    fi
-
-    # 3-way text merge with diff3
-    if ! command -v diff3 &>/dev/null; then
-        _sync_home_file_interactive "$src" "$dst" "$baseline"
-        return
-    fi
-
-    local merged diff3_exit
-    set +e
-    merged=$(diff3 -m "$dst" "$baseline" "$src" 2>/dev/null)
-    diff3_exit=$?
-    set -e
-
-    case "$diff3_exit" in
-        0)
-            if [ "$merged" = "$(cat "$dst")" ]; then
-                cp "$src" "$baseline"
-                skip "unchanged (merge identical): ~/${dst#"$HOME"/}"
-            else
-                printf '%s\n' "$merged" > "$dst"
-                cp "$src" "$baseline"
-                ok "merged: ~/${dst#"$HOME"/}"
-            fi
-            ;;
-        1)
-            local bak
-            bak=$(_backup_file "$dst")
-            cp "$src" "$dst"
-            cp "$src" "$baseline"
-            printf '  \033[33m!\033[0m conflict in ~/%s — backup: %s\n' \
-                "${dst#"$HOME"/}" "$(basename "$bak")"
-            printf '    Review and re-apply your customizations from the backup.\n'
-            ;;
-        *)
-            _sync_home_file_interactive "$src" "$dst" "$baseline"
-            ;;
-    esac
-}
-
-_sync_home_files() {
-    local src_base="$1"
-    local dst_base="$2"
-
-    [ -d "$src_base" ] || return 0
-
-    while IFS= read -r -d '' src; do
-        _sync_one_home_file "$src" "$src_base" "$dst_base"
-    done < <(find "$src_base" -type f -print0)
-}
-
-_sync_home_files "$DOTFILES/home/.config"      "$HOME/.config"
-_sync_home_files "$DOTFILES/home/.local/share" "$HOME/.local/share"
-_sync_home_files "$DOTFILES/home/.local/bin"   "$HOME/.local/bin"
-[ -d "$HOME/.local/bin" ] && chmod +x "$HOME/.local/bin"/* 2>/dev/null || true
-[ -d "$HOME/.config/hypr/scripts" ] && chmod +x "$HOME/.config/hypr/scripts"/*.sh 2>/dev/null || true
+# Bring writers back (qs-restart), then hyprctl reload LAST.
+hs_resume_writers
 echo ""
 
 # ── dconf settings ────────────────────────────────────────────────────────────
@@ -584,7 +427,8 @@ else
 fi
 ( while true; do sudo -n true; sleep 50; done ) &
 SUDO_KEEPALIVE_PID=$!
-trap 'kill "$SUDO_KEEPALIVE_PID" 2>/dev/null' EXIT
+# Note: cleanup (including killing this keepalive) is handled by _hs_cleanup,
+# the EXIT/INT/TERM trap armed above. Don't re-trap here or it would clobber it.
 
 UPDATED=0
 
@@ -1037,6 +881,17 @@ if [ -d "$DOTFILES/wallpapers" ]; then
         fi
     done
     ok "Copied $_wp_copied wallpaper(s) to ~/Pictures/Wallpapers/"
+fi
+
+# ── Home-config conflict report ──────────────────────────────────────────────
+# One consolidated report of any `track` conflicts recorded during the home sync.
+_resolver="$HOME/.local/bin/nixpresso-resolve-conflicts"
+if [ -x "$_resolver" ]; then
+    echo ""
+    "$_resolver" || true
+elif command -v nixpresso-resolve-conflicts &>/dev/null; then
+    echo ""
+    nixpresso-resolve-conflicts || true
 fi
 
 echo ""

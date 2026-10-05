@@ -1,0 +1,330 @@
+#!/usr/bin/env bash
+# nixpresso-resolve-conflicts — review and resolve NixPresso home-config
+# conflicts recorded by update.sh (Mechanic-1).
+#
+# On a `track` conflict update.sh takes the repo version, keeps a backup of the
+# user's file, and journals the event. This tool lets you review those and, per
+# the council's RESTORE invariant (option b), rewrite ONLY the live file; the
+# baseline stays at the repo version N, so a restored file becomes a user
+# modification that is 3-way merged on the next update (no baseline rewind).
+#
+# Re-runnable and resumable: resolution status is written per entry, atomically.
+#
+# Usage:
+#   nixpresso-resolve-conflicts            consolidated report (+ menu if a tty)
+#   nixpresso-resolve-conflicts --all-old  restore YOUR old version for all pending
+#   nixpresso-resolve-conflicts --step     resolve interactively, per item
+#   nixpresso-resolve-conflicts --keep-new keep the repo version (no writes)
+#   nixpresso-resolve-conflicts --purge    prune resolved runs older than 30 days
+
+set -uo pipefail
+
+CONFLICT_ROOT="${HS_CONFLICT_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/nixpresso/conflicts}"
+RESOLVED_ROOT="$CONFLICT_ROOT/resolved"
+
+bold() { printf '\033[1m%s\033[0m\n' "$*"; }
+info() { printf '  %s\n' "$*"; }
+warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
+err()  { printf '  \033[31mx\033[0m %s\n' "$*"; }
+ok()   { printf '  \033[32m*\033[0m %s\n' "$*"; }
+
+_fsync() { sync -d "$1" 2>/dev/null || sync; }
+_sha()   { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
+_is_text() { grep -qI '' "$1" 2>/dev/null; }
+
+# Atomic same-fs write of content-file $1 -> dest $2.
+_atomic_put() {
+    local srcfile="$1" dest="$2" destdir tmp
+    destdir="$(dirname "$dest")"
+    mkdir -p "$destdir"
+    tmp="$(mktemp "$destdir/.tmp.XXXXXX")" || return 1
+    cp "$srcfile" "$tmp" || { rm -f "$tmp"; return 1; }
+    _fsync "$tmp"
+    mv -f "$tmp" "$dest" || { rm -f "$tmp"; return 1; }
+    _fsync "$destdir"
+}
+
+# Per-entry resolution status, atomic: <rundir>/.resolution/<flatrel>
+_flat() { printf '%s' "$1" | sed 's|/|%|g'; }
+_set_status() {
+    local rundir="$1" rel="$2" status="$3" sdir tmp
+    sdir="$rundir/.resolution"
+    mkdir -p "$sdir"
+    tmp="$(mktemp "$sdir/.s.XXXXXX")" || return 1
+    printf '%s\n' "$status" > "$tmp"
+    _fsync "$tmp"
+    mv -f "$tmp" "$sdir/$(_flat "$rel")"
+    _fsync "$sdir"
+}
+_get_status() {
+    local rundir="$1" rel="$2" f="$1/.resolution/$(_flat "$2")"
+    [ -f "$f" ] && cat "$f" || printf 'pending'
+}
+
+# Field extractor for a journal.jsonl line.
+_field() { printf '%s' "$1" | sed -n "s/.*\"$2\":\"\([^\"]*\)\".*/\1/p"; }
+
+# Collect pending entries into parallel arrays. Last journal line per dest wins.
+RUNDIRS=(); E_RUN=(); E_DEST=(); E_REL=(); E_CLASS=(); E_USER=(); E_BASE=(); E_REPO=(); E_ACTION=()
+_collect() {
+    RUNDIRS=(); E_RUN=(); E_DEST=(); E_REL=(); E_CLASS=(); E_USER=(); E_BASE=(); E_REPO=(); E_ACTION=()
+    local jl line dest rel class ub bb nb st rundir action
+    shopt -s nullglob
+    for jl in "$CONFLICT_ROOT"/*/journal.jsonl; do
+        rundir="$(dirname "$jl")"
+        case "$rundir" in "$RESOLVED_ROOT"*) continue ;; esac
+        # Deduplicate by dest, keeping the most recent applied/intended line.
+        declare -A seen=()
+        while IFS= read -r line; do
+            st="$(_field "$line" status)"
+            [ "$st" = applied ] || [ "$st" = intended ] || continue
+            dest="$(_field "$line" dest)"
+            [ -n "$dest" ] || continue
+            seen["$dest"]="$line"
+        done < "$jl"
+        for dest in "${!seen[@]}"; do
+            line="${seen[$dest]}"
+            rel="$(_field "$line" rel)"
+            class="$(_field "$line" class)"
+            ub="$(_field "$line" user_blob)"
+            bb="$(_field "$line" base_blob)"
+            nb="$(_field "$line" repo_blob)"
+            action="$(_field "$line" action)"; [ -n "$action" ] || action="overwrite-repo"
+            [ "$(_get_status "$rundir" "$rel")" = pending ] || continue
+            RUNDIRS+=("$rundir")
+            E_RUN+=("$rundir"); E_DEST+=("$dest"); E_REL+=("$rel"); E_CLASS+=("$class")
+            E_USER+=("$ub"); E_BASE+=("$bb"); E_REPO+=("$nb"); E_ACTION+=("$action")
+        done
+        unset seen
+    done
+    shopt -u nullglob
+}
+
+# Restore the user's old version (whole file) to live. Baseline untouched (option b).
+_restore_old() {
+    local dest="$1" ub="$2"
+    [ -f "$ub" ] || { err "missing backup blob for $dest"; return 1; }
+    _atomic_put "$ub" "$dest"
+}
+
+# Per-item interactive resolution.
+_step_one() {
+    local rundir="$1" dest="$2" rel="$3" ub="$4" bb="$5" nb="$6"
+    echo ""
+    bold "~/$rel"
+    info "live now holds the repo version; your old version is backed up."
+    if [ -f "$ub" ] && [ -f "$nb" ] && _is_text "$ub" && _is_text "$nb"; then
+        if [[ "$rel" == *.json ]] && command -v jq >/dev/null 2>&1; then
+            _step_json "$rundir" "$dest" "$rel" "$ub" "$bb" "$nb"; return
+        fi
+        _step_text "$rundir" "$dest" "$rel" "$ub" "$bb" "$nb"; return
+    fi
+    # Binary / unreadable: whole-file choice only.
+    local ans
+    read -rp "  [O]ld (restore yours) / [N]ew (keep repo) / [D]efer [d]: " ans </dev/tty
+    case "${ans:-d}" in
+        [Oo]*) _restore_old "$dest" "$ub" && _set_status "$rundir" "$rel" restored-old && ok "restored your version: ~/$rel" ;;
+        [Nn]*) _set_status "$rundir" "$rel" kept-new && info "kept repo version: ~/$rel" ;;
+        *)     info "deferred: ~/$rel" ;;
+    esac
+}
+
+# Per-top-level-key JSON resolution (jq).
+_step_json() {
+    local rundir="$1" dest="$2" rel="$3" ub="$4" bb="$5" nb="$6"
+    local keys k uval nval ans
+    keys="$(jq -r 'keys[]' "$nb" 2>/dev/null; jq -r 'keys[]' "$ub" 2>/dev/null)"
+    keys="$(printf '%s\n' "$keys" | sort -u)"
+    # Start from the repo (new) version; override keys the user chooses to keep.
+    local work; work="$(mktemp "$(dirname "$dest")/.rj.XXXXXX")"
+    cp "$nb" "$work"
+    local changed=0
+    while IFS= read -r k; do
+        [ -n "$k" ] || continue
+        uval="$(jq -c --arg k "$k" '.[$k]' "$ub" 2>/dev/null)"
+        nval="$(jq -c --arg k "$k" '.[$k]' "$nb" 2>/dev/null)"
+        [ "$uval" = "$nval" ] && continue
+        echo ""
+        info "key \"$k\":  old=$uval   new=$nval"
+        read -rp "    keep [o]ld / [n]ew [n]: " ans </dev/tty
+        if [[ "${ans:-n}" =~ ^[Oo] ]]; then
+            local t2; t2="$(mktemp "$(dirname "$dest")/.rj2.XXXXXX")"
+            if [ "$uval" = "null" ] && ! jq -e --arg k "$k" 'has($k)' "$ub" >/dev/null 2>&1; then
+                jq --arg k "$k" 'del(.[$k])' "$work" > "$t2" && mv -f "$t2" "$work"
+            else
+                jq --arg k "$k" --argjson v "$uval" '.[$k]=$v' "$work" > "$t2" && mv -f "$t2" "$work"
+            fi
+            changed=1
+        fi
+    done <<< "$keys"
+    if [ "$changed" = 1 ]; then
+        _atomic_put "$work" "$dest" && ok "applied per-key choices: ~/$rel"
+    else
+        info "kept repo version: ~/$rel"
+    fi
+    rm -f "$work"
+    _set_status "$rundir" "$rel" resolved
+}
+
+# Per-hunk text resolution: re-run diff3 -m over user/base/repo.
+_step_text() {
+    local rundir="$1" dest="$2" rel="$3" ub="$4" bb="$5" nb="$6" ans
+    if command -v diff3 >/dev/null 2>&1 && [ -f "$bb" ]; then
+        echo ""
+        info "3-way view (your version vs base vs repo):"
+        diff3 -m "$ub" "$bb" "$nb" 2>/dev/null | sed 's/^/    /'
+        echo ""
+    else
+        diff "$ub" "$nb" 2>/dev/null | sed 's/^/    /'
+    fi
+    read -rp "  [O]ld (restore yours) / [N]ew (keep repo) / [M]erged (write 3-way) / [D]efer [d]: " ans </dev/tty
+    case "${ans:-d}" in
+        [Oo]*) _restore_old "$dest" "$ub" && _set_status "$rundir" "$rel" restored-old && ok "restored your version: ~/$rel" ;;
+        [Nn]*) _set_status "$rundir" "$rel" kept-new && info "kept repo version: ~/$rel" ;;
+        [Mm]*)
+            local t; t="$(mktemp "$(dirname "$dest")/.rm.XXXXXX")"
+            diff3 -m "$ub" "$bb" "$nb" > "$t" 2>/dev/null
+            _atomic_put "$t" "$dest" && ok "wrote 3-way merge (review conflict markers): ~/$rel"
+            rm -f "$t"
+            _set_status "$rundir" "$rel" merged ;;
+        *) info "deferred: ~/$rel" ;;
+    esac
+}
+
+# Move fully-resolved run dirs into resolved/<run-ts>/.
+_sweep_resolved() {
+    shopt -s nullglob
+    local rundir jl line rel st allresolved base
+    for jl in "$CONFLICT_ROOT"/*/journal.jsonl; do
+        rundir="$(dirname "$jl")"
+        case "$rundir" in "$RESOLVED_ROOT"*) continue ;; esac
+        allresolved=1
+        while IFS= read -r line; do
+            st="$(_field "$line" status)"
+            [ "$st" = applied ] || [ "$st" = intended ] || continue
+            rel="$(_field "$line" rel)"
+            [ "$(_get_status "$rundir" "$rel")" = pending ] && { allresolved=0; break; }
+        done < "$jl"
+        if [ "$allresolved" = 1 ]; then
+            mkdir -p "$RESOLVED_ROOT"
+            base="$(basename "$rundir")"
+            mv -f "$rundir" "$RESOLVED_ROOT/$base" 2>/dev/null \
+                && ok "run resolved, archived: $base"
+        fi
+    done
+    shopt -u nullglob
+}
+
+_purge() {
+    [ -d "$RESOLVED_ROOT" ] || { info "nothing to purge"; return 0; }
+    local n=0 d
+    shopt -s nullglob
+    for d in "$RESOLVED_ROOT"/*/; do
+        if [ -n "$(find "$d" -maxdepth 0 -mtime +30 2>/dev/null)" ]; then
+            rm -rf "$d" && n=$((n+1))
+        fi
+    done
+    shopt -u nullglob
+    ok "purged $n resolved run(s) older than 30 days"
+}
+
+_report() {
+    _collect
+    if [ "${#E_REL[@]}" -eq 0 ]; then
+        ok "no pending home-config conflicts or updates"
+        return 0
+    fi
+    local i nheal=0 nconf=0
+    for i in "${!E_REL[@]}"; do
+        if [ "${E_ACTION[$i]}" = heal-update ]; then nheal=$((nheal+1)); else nconf=$((nconf+1)); fi
+    done
+    if [ "$nheal" -gt 0 ]; then
+        echo ""
+        bold "NixPresso home-config — $nheal file(s) updated to repo version (originals backed up)"
+        for i in "${!E_REL[@]}"; do
+            [ "${E_ACTION[$i]}" = heal-update ] || continue
+            info "~/${E_REL[$i]}   (heal-update; your backup: ${E_USER[$i]})"
+        done
+    fi
+    if [ "$nconf" -gt 0 ]; then
+        echo ""
+        bold "NixPresso home-config conflicts — $nconf pending"
+        for i in "${!E_REL[@]}"; do
+            [ "${E_ACTION[$i]}" = heal-update ] && continue
+            info "~/${E_REL[$i]}   (class=${E_CLASS[$i]}, repo applied; your backup: ${E_USER[$i]})"
+        done
+    fi
+    echo ""
+}
+
+# ── Entry ────────────────────────────────────────────────────────────────────
+MODE="${1:-report}"
+case "$MODE" in
+    --purge) _purge; exit 0 ;;
+    --all-old)
+        _collect
+        [ "${#E_REL[@]}" -eq 0 ] && { ok "no pending conflicts"; exit 0; }
+        echo ""
+        warn "RESTORING ALL OLD VERSIONS."
+        warn "New features may not work under old settings — proceed only if you"
+        warn "understand this may break functionality introduced by the update."
+        local_i=0
+        for local_i in "${!E_REL[@]}"; do
+            if _restore_old "${E_DEST[$local_i]}" "${E_USER[$local_i]}"; then
+                _set_status "${E_RUN[$local_i]}" "${E_REL[$local_i]}" restored-old
+                ok "restored: ~/${E_REL[$local_i]}"
+            fi
+        done
+        _sweep_resolved
+        exit 0 ;;
+    --keep-new)
+        _collect
+        [ "${#E_REL[@]}" -eq 0 ] && { ok "no pending conflicts"; exit 0; }
+        for i in "${!E_REL[@]}"; do
+            _set_status "${E_RUN[$i]}" "${E_REL[$i]}" kept-new
+            info "kept repo version: ~/${E_REL[$i]}"
+        done
+        _sweep_resolved
+        exit 0 ;;
+    --step)
+        _collect
+        [ "${#E_REL[@]}" -eq 0 ] && { ok "no pending conflicts"; exit 0; }
+        if [ ! -t 0 ] || [ "${NIXSTORE_NONINTERACTIVE:-0}" = 1 ]; then
+            err "--step needs an interactive terminal"; exit 1
+        fi
+        for i in "${!E_REL[@]}"; do
+            _step_one "${E_RUN[$i]}" "${E_DEST[$i]}" "${E_REL[$i]}" \
+                      "${E_USER[$i]}" "${E_BASE[$i]}" "${E_REPO[$i]}"
+        done
+        _sweep_resolved
+        exit 0 ;;
+    report|"")
+        _report
+        _collect
+        [ "${#E_REL[@]}" -eq 0 ] && exit 0
+        if [ -t 0 ] && [ -t 1 ] && [ "${NIXSTORE_NONINTERACTIVE:-0}" != 1 ]; then
+            bold "Resolve now?"
+            info "a) restore ALL your old versions   : nixpresso-resolve-conflicts --all-old"
+            info "b) decide per item / per key       : nixpresso-resolve-conflicts --step"
+            info "c) keep the repo versions          : nixpresso-resolve-conflicts --keep-new"
+            read -rp "  [a/b/c/ENTER=later]: " ans </dev/tty
+            case "${ans:-}" in
+                a|A) exec "$0" --all-old ;;
+                b|B) exec "$0" --step ;;
+                c|C) exec "$0" --keep-new ;;
+                *)   info "deferred — run 'nixpresso-resolve-conflicts' any time." ;;
+            esac
+        else
+            # Non-interactive: DEFER. Print exact command, notify best-effort, never block.
+            echo ""
+            warn "Home-config conflicts are pending (repo versions applied; backups kept)."
+            info "Resolve with:  nixpresso-resolve-conflicts --step"
+            command -v notify-send >/dev/null 2>&1 && \
+                notify-send "NixPresso" "Home-config conflicts pending — run nixpresso-resolve-conflicts --step" 2>/dev/null || true
+        fi
+        exit 0 ;;
+    *)
+        err "unknown option: $MODE"
+        info "try: --all-old | --step | --keep-new | --purge"
+        exit 2 ;;
+esac

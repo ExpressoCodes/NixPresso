@@ -21,9 +21,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # uxplay ──────────────────────────────────────────────────────────────────
-    uxplay.url = "github:ExpressoCodes/uxplay";
-
     # hyprland-settings ───────────────────────────────────────────────────────
     hyprland-settings.url = "github:ExpressoCodes/hyprland-settings";
 
@@ -36,7 +33,6 @@
       nixpkgs,           # nixpkgs
       hyprland,          # hyprland
       hyprland-settings, # hyprland-settings
-      uxplay,            # uxplay
       ...                # nixstore (accessed via inputs.nixstore in configuration.nix)
     } @ inputs:
     let

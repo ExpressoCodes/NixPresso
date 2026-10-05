@@ -67,7 +67,7 @@ Singleton {
         visibilityMode: "reserve", lastVisibleMode: "reserve", lastHiddenMode: "intelligent",
         hideOnFullscreen: true, showDelay: 150, hideDelay: 500, animationSpeed: 1.0, clickFocused: "cycle",
         showRunning: true, bounceOnLaunch: true, hideNoDisplay: true,
-        pins: ["kitty", "brave-origin", "org.gnome.Nautilus"],
+        pins: ["kitty", "firefox", "org.gnome.Nautilus"],
         exclusions: ["org.quickshell", "quickshell", "/^xdg-desktop-portal-.*$/", "hyprpolkitagent", "/^polkit-.*$/"]
     })
     readonly property var ranges: ({
@@ -376,7 +376,7 @@ Singleton {
             id: adapter
 
             property int version: 1
-            property list<string> pins: ["kitty", "brave-origin", "org.gnome.Nautilus"]
+            property list<string> pins: ["kitty", "firefox", "org.gnome.Nautilus"]
 
             property JsonObject appearance: JsonObject {
                 id: appearance

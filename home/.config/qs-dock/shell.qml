@@ -12,6 +12,11 @@ ShellRoot {
     // is unplugged, or no monitor is focused yet) every screen gets one, so the dock never vanishes.
     Variants {
         model: {
+            // Fully disabled: no Dock is instantiated, so there is no window and no reserved
+            // space on any screen. The settings window (IPC) and DockIpc stay available so the
+            // dock can be re-enabled. This is distinct from the autohide visibility modes.
+            if (!Settings.enabled)
+                return [];
             const screens = Quickshell.screens;
             const want = Settings.monitors === "all" ? ""
                        : Settings.monitors === "focused" ? (Hyprland.focusedMonitor?.name ?? "")

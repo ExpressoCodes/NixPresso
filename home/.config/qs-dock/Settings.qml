@@ -40,6 +40,7 @@ Singleton {
     property alias monitors: position.monitors
     property alias onlyCurrentMonitorApps: position.onlyCurrentMonitorApps
     // Behaviour
+    property alias enabled: behaviour.enabled
     property alias visibilityMode: behaviour.visibilityMode
     readonly property alias lastVisibleMode: behaviour.lastVisibleMode
     readonly property alias lastHiddenMode: behaviour.lastHiddenMode
@@ -62,6 +63,7 @@ Singleton {
         iconSize: 48, magnification: true, maxMagnifiedSize: 80, magnificationSpread: 2.5, spacing: 6,
         backgroundOpacity: 85, cornerRadius: 18, showSeparator: true, indicatorStyle: "dot",
         edge: "bottom", margin: 6, monitors: "all", onlyCurrentMonitorApps: false,
+        enabled: true,
         visibilityMode: "reserve", lastVisibleMode: "reserve", lastHiddenMode: "intelligent",
         hideOnFullscreen: true, showDelay: 150, hideDelay: 500, animationSpeed: 1.0, clickFocused: "cycle",
         showRunning: true, bounceOnLaunch: true, hideNoDisplay: true,
@@ -397,6 +399,7 @@ Singleton {
             }
             property JsonObject behaviour: JsonObject {
                 id: behaviour
+                property bool enabled: true
                 property string visibilityMode: "reserve"
                 property string lastVisibleMode: "reserve"
                 property string lastHiddenMode: "intelligent"

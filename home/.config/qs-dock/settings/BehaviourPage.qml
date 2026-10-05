@@ -10,6 +10,14 @@ Column {
     }
 
     SettingRow {
+        label: "Enable dock"
+        Toggle {
+            checked: Settings.enabled
+            onToggled: on => Settings.enabled = on
+        }
+    }
+
+    SettingRow {
         label: "Visibility"
         RadioList {
             options: [

@@ -9,7 +9,7 @@ var groups = {
     appearance: ["iconSize", "magnification", "maxMagnifiedSize", "magnificationSpread", "spacing",
         "backgroundOpacity", "cornerRadius", "showSeparator", "indicatorStyle"],
     position: ["edge", "margin", "monitors", "onlyCurrentMonitorApps"],
-    behaviour: ["visibilityMode", "lastVisibleMode", "lastHiddenMode", "hideOnFullscreen", "showDelay",
+    behaviour: ["enabled", "visibilityMode", "lastVisibleMode", "lastHiddenMode", "hideOnFullscreen", "showDelay",
         "hideDelay", "animationSpeed", "clickFocused", "showRunning", "bounceOnLaunch"],
     filtering: ["hideNoDisplay", "exclusions"]
 };

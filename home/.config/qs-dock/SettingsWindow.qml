@@ -8,7 +8,7 @@ import "settings"
 FloatingWindow {
     id: win
 
-    readonly property var groups: ["Appearance", "Position", "Behaviour", "Filtering"]
+    readonly property var groups: ["General", "Appearance", "Position", "Behaviour", "Filtering"]
 
     title: "Dock Settings"
     implicitWidth: 720
@@ -98,23 +98,27 @@ FloatingWindow {
                 x: 24
                 y: 24
                 width: 492
-                height: [appearance, position, behaviour, filtering][UiState.settingsGroup].height
+                height: [general, appearance, position, behaviour, filtering][UiState.settingsGroup].height
 
+                GeneralPage {
+                    id: general
+                    visible: UiState.settingsGroup === 0
+                }
                 AppearancePage {
                     id: appearance
-                    visible: UiState.settingsGroup === 0
+                    visible: UiState.settingsGroup === 1
                 }
                 PositionPage {
                     id: position
-                    visible: UiState.settingsGroup === 1
+                    visible: UiState.settingsGroup === 2
                 }
                 BehaviourPage {
                     id: behaviour
-                    visible: UiState.settingsGroup === 2
+                    visible: UiState.settingsGroup === 3
                 }
                 FilteringPage {
                     id: filtering
-                    visible: UiState.settingsGroup === 3
+                    visible: UiState.settingsGroup === 4
                 }
             }
 
@@ -174,7 +178,7 @@ FloatingWindow {
                 return;
             } else if (k === Qt.Key_W) {
                 UiState.closeSettings();
-            } else if (k >= Qt.Key_1 && k <= Qt.Key_4 && !shift) {
+            } else if (k >= Qt.Key_1 && k <= Qt.Key_5 && !shift) {
                 win.selectGroup(k - Qt.Key_1);
             } else if (k === Qt.Key_Backtab || (k === Qt.Key_Tab && shift)) {
                 win.selectGroup(UiState.settingsGroup - 1);

@@ -6,7 +6,7 @@ import Quickshell
 // (primitives only, ADR-0001); it is not written to settings.json.
 Singleton {
     readonly property bool settingsOpen: persist.settingsOpen
-    // Selected settings group (0 Appearance, 1 Position, 2 Behaviour, 3 Filtering).
+    // Selected settings group (0 General, 1 Appearance, 2 Position, 3 Behaviour, 4 Filtering).
     readonly property int settingsGroup: persist.settingsGroup
     // True while the user drives the settings window with the keyboard; focus rings show only then.
     property bool keyboardNav: false
@@ -40,7 +40,7 @@ Singleton {
     }
 
     function selectGroup(index: int): void {
-        persist.settingsGroup = Math.max(0, Math.min(3, index));
+        persist.settingsGroup = Math.max(0, Math.min(4, index));
     }
 
     PersistentProperties {

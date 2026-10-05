@@ -9,5 +9,7 @@
     modulesFile = ./modules.json;
     flakeFile = ./flake.nix;
     terminalCommand = "${pkgs.kitty}/bin/kitty --class nixstore --title NixStore";
+    # Dotfiles consumed read-only from the flake input; `nix flake update` refreshes it.
+    dotfilesDir = "${inputs.nixpresso}";
   };
 }

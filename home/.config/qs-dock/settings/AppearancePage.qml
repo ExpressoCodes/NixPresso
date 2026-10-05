@@ -10,18 +10,6 @@ Column {
     }
 
     SettingRow {
-        label: "Icon size"
-        Slider {
-            from: Settings.ranges.iconSize[0]
-            to: Settings.ranges.iconSize[1]
-            stepSize: 2
-            value: Settings.iconSize
-            suffix: " px"
-            onMoved: v => Settings.iconSize = v
-        }
-    }
-
-    SettingRow {
         label: "Magnification"
         Toggle {
             checked: Settings.magnification

@@ -24,19 +24,6 @@ Column {
     }
 
     SettingRow {
-        label: "Edge"
-        Segmented {
-            options: [
-                { value: "bottom", label: "Bottom" },
-                { value: "left", label: "Left" },
-                { value: "right", label: "Right" }
-            ]
-            current: Settings.edge
-            onSelected: v => Settings.edge = v
-        }
-    }
-
-    SettingRow {
         label: "Margin from edge"
         Slider {
             from: Settings.ranges.margin[0]

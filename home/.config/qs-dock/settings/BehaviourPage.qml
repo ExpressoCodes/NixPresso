@@ -10,20 +10,6 @@ Column {
     }
 
     SettingRow {
-        label: "Visibility"
-        RadioList {
-            options: [
-                { value: "reserve", label: "Always visible, reserve space", description: "Windows stop above the dock" },
-                { value: "overlap", label: "Always visible, overlap", description: "Windows can go under the dock" },
-                { value: "autohide", label: "Autohide", description: "Shows when the pointer touches the edge" },
-                { value: "intelligent", label: "Intelligent autohide", description: "Hides when a window overlaps it" }
-            ]
-            current: Settings.visibilityMode
-            onSelected: v => Settings.setMode(v)
-        }
-    }
-
-    SettingRow {
         label: "Hide on fullscreen"
         Toggle {
             checked: Settings.hideOnFullscreen

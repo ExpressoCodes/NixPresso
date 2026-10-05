@@ -22,7 +22,10 @@
     };
 
     # hyprland-settings ───────────────────────────────────────────────────────
-    hyprland-settings.url = "github:ExpressoCodes/hyprland-settings";
+    hyprland-settings = {
+      url = "github:ExpressoCodes/hyprland-settings";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
     # nixpresso ───────────────────────────────────────────────────────────────
     nixpresso = { url = "github:ExpressoCodes/NixPresso"; flake = false; };

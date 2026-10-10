@@ -117,6 +117,7 @@ echo ""
 # ── Gather config ─────────────────────────────────────────────────────────────
 HOSTNAME=$(ask "Hostname"  "nixos")
 USERNAME=$(ask "Username"  "user")
+ARCH=$(uname -m)
 _detected="$(detect_gpu)"
 if [ "$_detected" = "vmware" ]; then
     GPU_VARIANT="vmware"
@@ -141,6 +142,7 @@ for src in "$DOTFILES/nixos"/*; do
     fname="$(basename "$src")"
     sed -e "s/yourhostname/$HOSTNAME/g" \
         -e "s/yourusername/$USERNAME/g" \
+        -e "s/yoursystem/$ARCH/g" \
         "$src" > "$MNT/etc/nixos/$fname"
     info "wrote $fname"
 done
@@ -155,6 +157,7 @@ DOTFILES_HOSTNAME=$HOSTNAME
 DOTFILES_USERNAME=$USERNAME
 DOTFILES_GPU_VARIANT=$GPU_VARIANT
 DOTFILES_REPO=/home/$USERNAME/NixPresso
+DOTFILES_ARCH=$ARCH
 EOF
 chmod 644 "$MNT/etc/nixos/.dotfiles-vars"
 ok "saved .dotfiles-vars"

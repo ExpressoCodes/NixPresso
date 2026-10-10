@@ -87,7 +87,7 @@
     {
       nixosConfigurations.yourhostname = nixpkgs.lib.nixosSystem { # TODO: match networking.hostName in configuration.nix
         specialArgs = { inherit inputs; };
-        system = "x86_64-linux";
+        system = "yoursystem-linux";
         modules = [
           (import ./configuration.nix)
           programOptionModule

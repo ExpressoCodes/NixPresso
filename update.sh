@@ -337,6 +337,7 @@ if [ ! -f "$VARS_FILE" ]; then
     echo ""
     bold "→ Requesting sudo to write $VARS_FILE ..."
     sudo -v
+    _arch=$(uname -m)
     sudo tee "$VARS_FILE" > /dev/null <<VARSEOF
 DOTFILES_HOSTNAME=$_hn
 DOTFILES_USERNAME=$_un
@@ -345,6 +346,7 @@ DOTFILES_TIMEZONE=$_tz
 DOTFILES_KEYMAP=$_km
 DOTFILES_LOCALE=$_lc
 DOTFILES_REPO=$DOTFILES
+DOTFILES_ARCH=$_arch
 VARSEOF
     sudo chmod 644 "$VARS_FILE"
     ok "Created $VARS_FILE"
@@ -363,6 +365,7 @@ LOCALE="${DOTFILES_LOCALE:-}"
 DOTFILES_REPO="${DOTFILES_REPO:-}"
 BOOT_MODE="${DOTFILES_BOOT_MODE:-}"
 GRUB_DEVICE="${DOTFILES_GRUB_DEVICE:-}"
+ARCH="${DOTFILES_ARCH:-$(uname -m)}"
 
 # Prompt for any vars missing from an older install, then persist them
 _vars_dirty=0
@@ -416,6 +419,7 @@ DOTFILES_LOCALE=$LOCALE
 DOTFILES_REPO=${DOTFILES_REPO:-$DOTFILES}
 DOTFILES_BOOT_MODE=$BOOT_MODE
 DOTFILES_GRUB_DEVICE=${GRUB_DEVICE:-}
+DOTFILES_ARCH=${ARCH:-$(uname -m)}
 VARSEOF
     ok "saved new vars to $VARS_FILE"
 fi
@@ -490,6 +494,7 @@ for src in "$DOTFILES/nixos"/*; do
         -e "s|yourtimezone|$TIMEZONE|g" \
         -e "s/yourkbdlayout/$KEYMAP/g" \
         -e "s|yourlocale|$LOCALE|g" \
+        -e "s/yoursystem/$ARCH/g" \
         -e "s/YOUREFIMODE/$_efi_bool/g" \
         -e "s|YOURGRUBDEVICE|${GRUB_DEVICE:-}|g" \
         "$src")
@@ -513,7 +518,7 @@ for src in "$DOTFILES/nixos"/*; do
     fi
 
     # Auto-apply when the current file still has unsubstituted placeholder tokens
-    if grep -qE '\byour(hostname|username|timezone|kbdlayout|locale)\b' <(echo "$current"); then
+    if grep -qE '\byour(hostname|username|timezone|kbdlayout|locale|system)\b' <(echo "$current"); then
         echo "$new" | sudo tee "$dest" > /dev/null
         echo "$new" | sudo tee "$baseline_file" > /dev/null
         ok "applied: $fname (substituted placeholder tokens)"

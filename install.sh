@@ -335,6 +335,7 @@ USERNAME=$(ask "Username" "$(whoami)")
 select_timezone
 select_keymap
 select_locale
+ARCH=$(uname -m)
 
 if [ -d /etc/nixos ]; then
     _detected="$(detect_gpu)"
@@ -388,6 +389,7 @@ if [ -d /etc/nixos ]; then
                 -e "s|yourtimezone|$TIMEZONE|g" \
                 -e "s/yourkbdlayout/$KEYMAP/g" \
                 -e "s|yourlocale|$LOCALE|g" \
+                -e "s/yoursystem/$ARCH/g" \
                 -e "s/YOUREFIMODE/$EFI_BOOL/g" \
                 -e "s|YOURGRUBDEVICE|$GRUB_DEVICE|g" \
                 "$src" | sudo tee "/etc/nixos/$fname" > /dev/null
@@ -398,6 +400,7 @@ if [ -d /etc/nixos ]; then
                 -e "s|yourtimezone|$TIMEZONE|g" \
                 -e "s/yourkbdlayout/$KEYMAP/g" \
                 -e "s|yourlocale|$LOCALE|g" \
+                -e "s/yoursystem/$ARCH/g" \
                 "$src" | sudo tee "/etc/nixos/$fname" > /dev/null
         fi
         info "wrote /etc/nixos/$fname"
@@ -418,6 +421,7 @@ DOTFILES_LOCALE=$LOCALE
 DOTFILES_REPO=$DOTFILES
 DOTFILES_BOOT_MODE=$BOOT_MODE
 DOTFILES_GRUB_DEVICE=${GRUB_DEVICE:-}
+DOTFILES_ARCH=$ARCH
 EOF
     sudo chmod 644 /etc/nixos/.dotfiles-vars   # readable by user services
     info "saved vars to /etc/nixos/.dotfiles-vars"
@@ -439,6 +443,7 @@ EOF
                 -e "s|yourtimezone|$TIMEZONE|g" \
                 -e "s/yourkbdlayout/$KEYMAP/g" \
                 -e "s|yourlocale|$LOCALE|g" \
+                -e "s/yoursystem/$ARCH/g" \
                 -e "s/YOUREFIMODE/$EFI_BOOL/g" \
                 -e "s|YOURGRUBDEVICE|$GRUB_DEVICE|g" \
                 "$src" | sudo tee "/etc/nixos/.dotfiles-nixos-baseline/$fname" > /dev/null
@@ -449,6 +454,7 @@ EOF
                 -e "s|yourtimezone|$TIMEZONE|g" \
                 -e "s/yourkbdlayout/$KEYMAP/g" \
                 -e "s|yourlocale|$LOCALE|g" \
+                -e "s/yoursystem/$ARCH/g" \
                 "$src" | sudo tee "/etc/nixos/.dotfiles-nixos-baseline/$fname" > /dev/null
         fi
     done

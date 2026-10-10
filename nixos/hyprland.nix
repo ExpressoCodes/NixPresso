@@ -52,7 +52,7 @@ in
   environment.sessionVariables.NIXOS_OZONE_WL = "1";
 
   environment.systemPackages = [
-    inputs.hyprland-settings.packages.x86_64-linux.default
+    inputs.hyprland-settings.packages.${pkgs.stdenv.hostPlatform.system}.default
   ];
 
 }

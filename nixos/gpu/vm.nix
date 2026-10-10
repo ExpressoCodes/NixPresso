@@ -1,6 +1,8 @@
 { config, pkgs, ... }:
 
 {
+  # QEMU / KVM / VirtualBox — virtio-gpu with hardware-accelerated GL (virgl).
+  # For VMware Fusion, use vmware.nix instead.
   hardware.graphics = {
     enable = true;
     extraPackages = with pkgs; [ mesa ];

@@ -25,10 +25,14 @@ ask() {
 
 detect_gpu() {
     # VM check first — systemd-detect-virt is authoritative; lspci is the fallback
-    if systemd-detect-virt --vm -q 2>/dev/null; then echo "vm" && return; fi
+    local virt_type
+    virt_type=$(systemd-detect-virt --vm 2>/dev/null || true)
+    if [ "$virt_type" = "vmware" ]; then echo "vmware" && return; fi
+    if [ -n "$virt_type" ] && [ "$virt_type" != "none" ]; then echo "vm" && return; fi
     local pci has_intel=false has_amd=false has_nvidia=false
     pci=$(lspci 2>/dev/null || true)
-    echo "$pci" | grep -qi 'Virtio.*GPU\|VirtIO\|QXL paravirtual\|VMware SVGA\|VirtualBox Graph' && echo "vm" && return
+    echo "$pci" | grep -qi 'VMware SVGA' && echo "vmware" && return
+    echo "$pci" | grep -qi 'Virtio.*GPU\|VirtIO\|QXL paravirtual\|VirtualBox Graph' && echo "vm" && return
     echo "$pci" | grep -qi 'VGA.*Intel\|Intel.*VGA\|Intel.*Graphics' && has_intel=true
     echo "$pci" | grep -qi 'VGA.*AMD\|AMD.*VGA\|VGA.*ATI\|Radeon'   && has_amd=true
     echo "$pci" | grep -qi 'VGA.*NVIDIA\|NVIDIA.*VGA'                && has_nvidia=true
@@ -59,15 +63,16 @@ select_gpu() {
     echo "  3) nvidia         (NVIDIA only)"
     echo "  4) intel-nvidia   (Intel iGPU + NVIDIA dGPU, PRIME offload)"
     echo "  5) amd-nvidia     (AMD iGPU + NVIDIA dGPU, PRIME offload)"
+    echo "  6) vm-vmware      (VMware Fusion — software rendering)"
     echo ""
-    local map=( "" intel amd nvidia intel-nvidia amd-nvidia ) default_idx=1
-    for i in 1 2 3 4 5; do [ "${map[$i]}" = "$detected" ] && default_idx=$i; done
+    local map=( "" intel amd nvidia intel-nvidia amd-nvidia vmware ) default_idx=1
+    for i in 1 2 3 4 5 6; do [ "${map[$i]}" = "$detected" ] && default_idx=$i; done
     local choice
     while true; do
         read -rp "$(bold "Choice") [$default_idx]: " choice
         choice="${choice:-$default_idx}"
-        [[ "$choice" =~ ^[1-5]$ ]] && break
-        info "Invalid choice '$choice' — enter a number 1–5."
+        [[ "$choice" =~ ^[1-6]$ ]] && break
+        info "Invalid choice '$choice' — enter a number 1–6."
     done
     GPU_VARIANT="${map[$choice]}"
 }
@@ -113,7 +118,10 @@ echo ""
 HOSTNAME=$(ask "Hostname"  "nixos")
 USERNAME=$(ask "Username"  "user")
 _detected="$(detect_gpu)"
-if [ "$_detected" = "vm" ]; then
+if [ "$_detected" = "vmware" ]; then
+    GPU_VARIANT="vmware"
+    bold "VMware detected — configuring for software-rendered Wayland"
+elif [ "$_detected" = "vm" ]; then
     GPU_VARIANT="vm"
     bold "Virtual machine detected — configuring for virtio-gpu"
 else

@@ -285,12 +285,17 @@ if [ ! -f "$VARS_FILE" ]; then
 
     # GPU detection (reuse install.sh logic)
     _detected="unknown"
-    if systemd-detect-virt --vm -q 2>/dev/null; then
+    local _virt_type
+    _virt_type=$(systemd-detect-virt --vm 2>/dev/null || true)
+    if [ "$_virt_type" = "vmware" ]; then
+        _detected="vmware"
+    elif [ -n "$_virt_type" ] && [ "$_virt_type" != "none" ]; then
         _detected="vm"
     else
         _pci=$(lspci 2>/dev/null || true)
-        echo "$_pci" | grep -qi 'Virtio.*GPU\|VirtIO\|QXL paravirtual\|VMware SVGA\|VirtualBox Graph' && _detected="vm"
-        if [ "$_detected" != "vm" ]; then
+        echo "$_pci" | grep -qi 'VMware SVGA' && _detected="vmware"
+        [ "$_detected" = "unknown" ] && echo "$_pci" | grep -qi 'Virtio.*GPU\|VirtIO\|QXL paravirtual\|VirtualBox Graph' && _detected="vm"
+        if [ "$_detected" != "vm" ] && [ "$_detected" != "vmware" ]; then
             _has_intel=false; _has_amd=false; _has_nvidia=false
             echo "$_pci" | grep -qi 'VGA.*Intel\|Intel.*VGA\|Intel.*Graphics' && _has_intel=true
             echo "$_pci" | grep -qi 'VGA.*AMD\|AMD.*VGA\|VGA.*ATI\|Radeon'   && _has_amd=true
@@ -310,17 +315,18 @@ if [ ! -f "$VARS_FILE" ]; then
     echo "  3) nvidia         (NVIDIA only)"
     echo "  4) intel-nvidia   (Intel iGPU + NVIDIA dGPU, PRIME offload)"
     echo "  5) amd-nvidia     (AMD iGPU + NVIDIA dGPU, PRIME offload)"
-    echo "  6) vm             (virtual machine)"
+    echo "  6) vm             (virtual machine — QEMU/KVM/VirtualBox)"
+    echo "  7) vm-vmware      (VMware Fusion — software rendering)"
     echo ""
     info "Detected: $_detected"
-    _map=( "" intel amd nvidia intel-nvidia amd-nvidia vm )
+    _map=( "" intel amd nvidia intel-nvidia amd-nvidia vm vmware )
     _default_idx=1
-    for _i in 1 2 3 4 5 6; do [ "${_map[$_i]}" = "$_detected" ] && _default_idx=$_i; done
+    for _i in 1 2 3 4 5 6 7; do [ "${_map[$_i]}" = "$_detected" ] && _default_idx=$_i; done
     while true; do
         read -rp "$(bold "GPU choice") [$_default_idx]: " _choice
         _choice="${_choice:-$_default_idx}"
-        [[ "$_choice" =~ ^[1-6]$ ]] && break
-        info "Enter a number 1–6."
+        [[ "$_choice" =~ ^[1-7]$ ]] && break
+        info "Enter a number 1–7."
     done
     _gpu="${_map[$_choice]}"
 

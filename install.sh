@@ -113,10 +113,14 @@ select_keymap() {
 
 detect_gpu() {
     # VM check first — systemd-detect-virt is authoritative; lspci is the fallback
-    if systemd-detect-virt --vm -q 2>/dev/null; then echo "vm" && return; fi
+    local virt_type
+    virt_type=$(systemd-detect-virt --vm 2>/dev/null || true)
+    if [ "$virt_type" = "vmware" ]; then echo "vmware" && return; fi
+    if [ -n "$virt_type" ] && [ "$virt_type" != "none" ]; then echo "vm" && return; fi
     local pci
     pci=$(lspci 2>/dev/null || true)
-    echo "$pci" | grep -qi 'Virtio.*GPU\|VirtIO\|QXL paravirtual\|VMware SVGA\|VirtualBox Graph' && echo "vm" && return
+    echo "$pci" | grep -qi 'VMware SVGA' && echo "vmware" && return
+    echo "$pci" | grep -qi 'Virtio.*GPU\|VirtIO\|QXL paravirtual\|VirtualBox Graph' && echo "vm" && return
 
     local has_intel=false has_amd=false has_nvidia=false
     echo "$pci" | grep -qi 'VGA.*Intel\|Intel.*VGA\|Intel.*Graphics' && has_intel=true
@@ -171,18 +175,19 @@ select_gpu() {
     echo "  4) nvidia         (NVIDIA only)"
     echo "  5) intel-nvidia   (Intel iGPU + NVIDIA dGPU, PRIME offload)"
     echo "  6) amd-nvidia     (AMD iGPU + NVIDIA dGPU, PRIME offload)"
+    echo "  7) vm-vmware      (VMware Fusion — software rendering)"
     echo ""
-    local map=( "" intel intel-legacy amd nvidia intel-nvidia amd-nvidia )
+    local map=( "" intel intel-legacy amd nvidia intel-nvidia amd-nvidia vmware )
     local default_idx=1
-    for i in 1 2 3 4 5 6; do
+    for i in 1 2 3 4 5 6 7; do
         [ "${map[$i]}" = "$detected" ] && default_idx=$i
     done
     local choice
     while true; do
         read -rp "$(bold "Choice") [$default_idx]: " choice
         choice="${choice:-$default_idx}"
-        [[ "$choice" =~ ^[1-6]$ ]] && break
-        info "Invalid choice '$choice' — enter a number 1–6."
+        [[ "$choice" =~ ^[1-7]$ ]] && break
+        info "Invalid choice '$choice' — enter a number 1–7."
     done
     GPU_VARIANT="${map[$choice]}"
 }
@@ -266,6 +271,36 @@ patch_for_legacy_intel() {
     info "Applied legacy-Intel crocus patches to Hyprland + Quickshell configs"
 }
 
+patch_for_vm() {
+    _materialise() {
+        local dst="$1" use_sudo="${2:-false}"
+        local _sudo=""; $use_sudo && _sudo="sudo"
+        if $_sudo test -L "$dst"; then
+            local src; src=$(readlink -f "$dst")
+            $_sudo rm "$dst"
+            if $_sudo test -d "$src"; then
+                $_sudo cp -rT "$src" "$dst"
+            else
+                $_sudo cp "$src" "$dst"
+            fi
+        fi
+    }
+
+    local config_dir="$1"
+    local use_sudo="${2:-false}"
+    local _sudo=""; $use_sudo && _sudo="sudo"
+
+    local hypr="$config_dir/hypr"
+    _materialise "$hypr" "$use_sudo"
+
+    # hyprland.lua: replace hyprpaper with swaybg (hyprpaper crashes under pixman/software rendering)
+    $_sudo sed -i \
+        's|hl\.exec_cmd("hyprpaper")|hl.exec_cmd("swaybg -m fill -i " .. os.getenv("HOME") .. "/Pictures/Wallpapers/nixos-wallpaper-catppuccin-mocha.png")|' \
+        "$hypr/hyprland.lua"
+
+    info "Applied VM patches: hyprpaper → swaybg"
+}
+
 detect_boot_mode() {
     if [ -d /sys/firmware/efi ]; then
         echo "efi"
@@ -303,7 +338,10 @@ select_locale
 
 if [ -d /etc/nixos ]; then
     _detected="$(detect_gpu)"
-    if [ "$_detected" = "vm" ]; then
+    if [ "$_detected" = "vmware" ]; then
+        GPU_VARIANT="vmware"
+        bold "VMware detected — configuring for software-rendered Wayland"
+    elif [ "$_detected" = "vm" ]; then
         GPU_VARIANT="vm"
         bold "Virtual machine detected — configuring for virtio-gpu"
     else
@@ -487,6 +525,8 @@ if [ "$(whoami)" != "$USERNAME" ]; then
     hs_seed_tree "$DOTFILES/home/.local/bin"   "$TARGET_HOME/.local/bin"
     if [ "$GPU_VARIANT" = "intel-legacy" ]; then
         patch_for_legacy_intel "$CONFIG" "$TARGET_HOME/.local/bin" true
+    elif [ "$GPU_VARIANT" = "vmware" ] || [ "$GPU_VARIANT" = "vm" ]; then
+        patch_for_vm "$CONFIG" true
     fi
     sudo chown -R "$USERNAME:users" "$CONFIG" "$TARGET_HOME/.local"
     HS_SUDO=""
@@ -497,6 +537,8 @@ else
     hs_seed_tree "$DOTFILES/home/.local/bin"   "$TARGET_HOME/.local/bin"
     if [ "$GPU_VARIANT" = "intel-legacy" ]; then
         patch_for_legacy_intel "$CONFIG" "$TARGET_HOME/.local/bin" false
+    elif [ "$GPU_VARIANT" = "vmware" ] || [ "$GPU_VARIANT" = "vm" ]; then
+        patch_for_vm "$CONFIG" false
     fi
 fi
 
